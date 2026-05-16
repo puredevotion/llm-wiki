@@ -15,10 +15,13 @@ Go backend for the knowledge base and virtual chief of staff.
 
 ```bash
 go test ./...
+go test ./internal/... -cover
 go run ./cmd/kbase-server
 ```
 
 The scaffold pins the official MCP Go SDK in `go.mod`.
+
+Code changes must be developed red-green with tests written before implementation. Active backend packages should maintain 90%+ coverage; process-only wiring such as `cmd/kbase-server/main.go` may be excluded from the active package coverage target until it contains testable logic.
 
 ## Package Boundaries
 

@@ -1,6 +1,6 @@
 ---
 name: tdd-workflow
-description: Use this skill when writing new features, fixing bugs, or refactoring code. Enforces test-driven development with 80%+ coverage including unit, integration, and E2E tests.
+description: Use this skill when writing new features, fixing bugs, or refactoring code. Enforces red-green test-driven development with 90%+ coverage including unit, integration, and E2E tests.
 ---
 
 # Test-Driven Development Workflow
@@ -21,7 +21,7 @@ This skill ensures all code development follows TDD principles with comprehensiv
 ALWAYS write tests first, then implement code to make tests pass.
 
 ### 2. Coverage Requirements
-- Minimum 80% coverage (unit + integration + E2E)
+- Minimum 90% coverage (unit + integration + E2E)
 - All edge cases covered
 - Error scenarios tested
 - Boundary conditions verified
@@ -112,7 +112,7 @@ Improve code quality while keeping tests green:
 ### Step 7: Verify Coverage
 ```bash
 npm run test:coverage
-# Verify 80%+ coverage achieved
+# Verify 90%+ coverage achieved
 ```
 
 ## Testing Patterns
@@ -301,10 +301,10 @@ npm run test:coverage
   "jest": {
     "coverageThresholds": {
       "global": {
-        "branches": 80,
-        "functions": 80,
-        "lines": 80,
-        "statements": 80
+        "branches": 90,
+        "functions": 90,
+        "lines": 90,
+        "statements": 90
       }
     }
   }
@@ -397,7 +397,7 @@ npm test && npm run lint
 
 ## Success Metrics
 
-- 80%+ code coverage achieved
+- 90%+ code coverage achieved
 - All tests passing (green)
 - No skipped or disabled tests
 - Fast test execution (< 30s for unit tests)

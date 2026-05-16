@@ -107,6 +107,53 @@ func TestVersionedSyncEndpointsAreReservedWithStandardNotImplementedErrors(t *te
 	}
 }
 
+func TestVersionedSyncEndpointsDocumentAllowedMethodsForOfflineClients(t *testing.T) {
+	server := newTestServer()
+	tests := []struct {
+		name          string
+		method        string
+		path          string
+		allowedMethod string
+	}{
+		{
+			name:          "operation batches are only accepted with POST",
+			method:        http.MethodGet,
+			path:          "/api/v1/sync/operations",
+			allowedMethod: http.MethodPost,
+		},
+		{
+			name:          "change pulls are read-only GET requests",
+			method:        http.MethodPost,
+			path:          "/api/v1/sync/changes",
+			allowedMethod: http.MethodGet,
+		},
+		{
+			name:          "bootstrap snapshots are read-only GET requests",
+			method:        http.MethodPost,
+			path:          "/api/v1/sync/bootstrap",
+			allowedMethod: http.MethodGet,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, nil)
+			res := httptest.NewRecorder()
+
+			server.Handler().ServeHTTP(res, req)
+
+			assertStatus(t, res, http.StatusMethodNotAllowed)
+			if allow := res.Header().Get("Allow"); allow != tt.allowedMethod {
+				t.Fatalf("expected Allow header %q, got %q", tt.allowedMethod, allow)
+			}
+			errorBody := decodeError(t, res)
+			if errorBody.Code != "method_not_allowed" {
+				t.Fatalf("expected stable method_not_allowed error code, got %q", errorBody.Code)
+			}
+		})
+	}
+}
+
 func TestUnversionedSyncEndpointsStayUnavailableToProtectMobileContractMigrations(t *testing.T) {
 	server := newTestServer()
 	req := httptest.NewRequest(http.MethodGet, "/api/sync/pull", nil)

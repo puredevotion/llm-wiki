@@ -30,8 +30,9 @@ When a runtime is added (Node/Python/etc.), define project scripts in a single c
 - Use repository-standard formatters/linters once introduced (for example, ESLint/Prettier or Ruff/Black).
 
 ## Testing Guidelines
-- Follow TDD when practical: failing test, minimal fix, refactor.
-- Target **80%+ coverage** for active modules.
+- All code changes must follow TDD: write a failing test first, implement the minimal fix, then refactor with tests green.
+- Target **90%+ coverage** for active modules and packages. Do not lower coverage without explicitly documenting why the uncovered code is not practical to test.
+- Test evidence for code changes must include the red-green sequence or a clear statement of the failing test added before implementation.
 - Test naming:
   - Unit: `*.unit.test.*`
   - Integration: `*.int.test.*`
