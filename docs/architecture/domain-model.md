@@ -24,7 +24,7 @@ A chunk is a bounded extract from a source that can be indexed, embedded, summar
 
 ### Zettel
 
-A zettel is a durable atomic note. It may be short-lived, long-running, or evergreen. Zettels are not raw captures; they are interpreted knowledge units linked to sources and other notes.
+A zettel is a durable atomic note inspired by zettelkasten practice. It may be short-lived, long-running, or evergreen. Zettels are not raw captures and are not markdown files; they are database records containing interpreted knowledge linked to sources and graph relationships.
 
 Key fields:
 
@@ -46,7 +46,7 @@ A topic is a nested knowledge area. Topic hierarchy should be explicit but not e
 
 ### Person / Team
 
-People and teams represent the who-plane. They are graph-friendly entities because relationships matter: reports-to, member-of, collaborated-with, owns-topic, mentioned-by, authored.
+People and teams represent the who-plane. They are graph-native entities because relationships matter: reports-to, member-of, collaborated-with, owns-topic, mentioned-by, authored.
 
 ### Event
 
@@ -54,7 +54,7 @@ An event captures time-sensitive context: meeting, deadline, decision, reminder,
 
 ## Relationship Types
 
-Use typed edges to connect entities:
+Use typed LadybugDB edges to connect graph nodes:
 
 - `MENTIONS`
 - `AUTHORED_BY`
@@ -68,7 +68,7 @@ Use typed edges to connect entities:
 - `SCHEDULED_FOR`
 - `VALID_DURING`
 
-The initial implementation stores edges in the primary Turso/Limbo-compatible database. Relationship queries should use indexed edge tables and recursive CTEs before introducing any graph-specific engine.
+Graph nodes should use stable IDs that can reference SQL records for sources, chunks, zettels, topics, people, teams, and events.
 
 ## Lifecycle Buckets
 
@@ -82,10 +82,10 @@ The initial implementation stores edges in the primary Turso/Limbo-compatible da
 
 ```text
 Capture source
-  -> store raw artifact
-  -> extract text and metadata
+  -> store raw artifact if needed
+  -> extract text and metadata into SQL tables
   -> chunk deterministically
   -> classify people/topics/time references
-  -> create inbox zettels and candidate edges
+  -> create inbox zettels and candidate graph relationships
   -> queue review/re-evaluation jobs
 ```

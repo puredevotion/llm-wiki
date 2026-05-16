@@ -12,50 +12,60 @@ Agents (Claude/ChatGPT/Copilot)
         | MCP Streamable HTTP
         v
 Go backend --------------------------------------------------+
-  HTTP API                                                   |
-  MCP tools/resources/prompts                                |
+  REST controllers                                           |
+  protobuf/connect controllers                               |
+  MCP controllers/tools/resources/prompts                    |
+  services                                                   |
+  repositories + clients                                     |
   background workers                                         |
-  sync engine                                                |
+  offline-first sync engine                                  |
         |                                                    |
         +--> Turso/Limbo-compatible SQL store                |
-        +--> graph projection via typed edge tables           |
-        +--> search/vector index adapter                     |
+        +--> LadybugDB graph database                        |
+        +--> search/vector adapter                           |
         +--> object/file store for original artifacts        |
                                                              |
-Web / Android / iOS clients <------ sync API ----------------+
+Web / Android / iOS clients <------ offline-first sync ------+
 ```
 
 ## Design Constraints
 
-- Keep operations light: prefer embedded libraries and single-binary deployment over separate services.
-- Make the Turso/Limbo-compatible store authoritative first; indexes can be rebuilt from primary tables and event logs.
-- Keep graph semantics in the data model, but do not introduce a separate graph database until edge-table traversal is proven insufficient.
+- Keep operations light: prefer embedded libraries and single-binary deployment over heavy distributed systems.
+- Store durable content in Turso/Limbo-compatible database tables, not markdown files.
+- Use LadybugDB as a separate direct graph database for relationship storage and traversal.
 - Keep all agent-facing actions behind typed MCP tools with validation, authorization, and audit records.
-- Treat mobile clients as occasionally connected replicas with local buffers, not as distributed masters.
+- Treat mobile clients as offline-first replicas with local writes, durable outboxes, and sync reconciliation.
 - Preserve provenance for every piece of content: source, timestamp, actor, transform chain, and confidence.
 
 ## Planes
 
 | Plane | Purpose | Primary Model |
 | --- | --- | --- |
-| Who | People, teams, accounts, organizations, roles | Identity records plus typed relationships |
-| What | Topics, zettels, source documents, summaries, claims | Zettelkasten notes and topic hierarchy |
+| Who | People, teams, accounts, organizations, roles | LadybugDB graph nodes/edges plus SQL metadata |
+| What | Topics, zettels, source documents, summaries, claims | Database-stored zettelkasten-inspired notes and topic records |
 | When | Events, validity windows, reminders, review cadence | Append-only event log plus temporal fields |
 | Why | Provenance, decisions, confidence, re-evaluation triggers | Metadata and audit trail |
 
 ## Backend Responsibilities
 
 - Ingest content from URLs, PDFs, pasted text, conversations, and future connectors.
-- Normalize content into sources, chunks, notes, claims, topics, and relationships.
-- Maintain search indexes and graph projections from the authoritative store.
+- Normalize content into sources, chunks, notes, claims, topics, and graph relationships.
+- Maintain search indexes and graph state from service-level writes and repair jobs.
 - Expose MCP tools for search, capture, linking, summarization requests, and review queues.
-- Expose mobile/web sync APIs with conflict detection and durable operation logs.
+- Expose REST/protobuf sync APIs with conflict detection and durable operation logs.
 - Run scheduled and event-driven re-evaluation jobs.
 
 ## Early Non-Goals
 
 - Multi-node database clustering.
-- Separate graph database operation.
+- Filesystem markdown knowledge store.
 - Real-time peer-to-peer mobile sync.
 - Letting agents write directly to database tables.
-- Premature adoption of a heavy graph/search server.
+- Premature adoption of heavy queue/search infrastructure.
+
+## More Detail
+
+- [Go backend architecture](go-backend.md)
+- [Go library selection](library-selection.md)
+- [Domain model](domain-model.md)
+- [Sync strategy](sync.md)

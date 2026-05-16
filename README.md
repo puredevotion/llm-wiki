@@ -2,16 +2,16 @@
 
 A persistent knowledge base and virtual chief of staff for people, teams, topics, time, and long-running context.
 
-The first implementation focus is a Go backend that owns durable knowledge storage and exposes a Model Context Protocol (MCP) interface for agents such as Claude, ChatGPT, and Copilot. Web, Android, and iOS clients are planned as sync-capable frontends rather than independent sources of truth.
+The first implementation focus is a Go backend that owns durable knowledge storage and exposes a Model Context Protocol (MCP) interface for agents such as Claude, ChatGPT, and Copilot. Web, Android, and iOS clients are planned as offline-first frontends with local buffering and sync.
 
 ## Architecture Direction
 
-- Backend: Go, single server binary, HTTP API plus MCP Streamable HTTP endpoint.
-- Persistence: Turso/Limbo-compatible SQL as the preferred embedded store, with portable SQLite semantics where needed.
-- Graph: typed edge tables in the primary store first; no separate graph database dependency in v1.
+- Backend: Go, single server binary, thin REST/protobuf controllers, service layer, repositories, outbound clients, and MCP Streamable HTTP endpoint.
+- Content persistence: Turso/Limbo-compatible SQL as the preferred embedded store, with portable SQLite semantics where needed.
+- Graph persistence: separate direct LadybugDB graph database for people, teams, topics, events, and relationships.
 - MCP: Agents connect to the backend through `/mcp`; tools call service-layer APIs rather than storage directly.
-- Sync: Mobile clients keep a local outbox/cache and reconcile with the server via append-only operations.
-- Knowledge model: Zettelkasten-inspired notes, sources, topics, persons, teams, events, and relationships.
+- Sync: Mobile clients operate offline-first with local outboxes/caches and reconcile with the server via append-only operations.
+- Knowledge model: Zettelkasten-inspired notes, sources, topics, persons, teams, events, and relationships stored in databases, not markdown files.
 
 ## Repository Layout
 

@@ -6,42 +6,58 @@ Accepted for initial scaffold.
 
 ## Context
 
-The system needs durable knowledge storage, full-text search, graph-like relationships, temporal reasoning, mobile sync, and background re-evaluation. It should remain operationally light and favor embedded or single-binary components.
+The system needs durable knowledge storage, full-text search, direct graph relationships, temporal reasoning, offline-first mobile sync, and background re-evaluation. It should remain operationally light and favor embedded or single-binary components where possible.
 
-Kuzu is no longer a suitable planned dependency: the upstream GitHub repository was archived by its owner on October 10, 2025. A separate graph database would also increase operational complexity before the graph workload is proven.
+Kuzu is no longer a suitable planned dependency: the upstream GitHub repository was archived by its owner on October 10, 2025.
 
 ## Decision
 
-Use Turso/Limbo-compatible SQL as the preferred authoritative persistence direction for the initial backend.
+Use two first-class persistence stores:
 
-Keep the schema portable across Turso/Limbo and SQLite-compatible tooling where practical. Treat graph, search, vector, and object storage as adapters or projections, not independent sources of truth.
+- Turso/Limbo-compatible SQL for durable content, operation logs, sync state, events, audit records, and database-stored zettelkasten-inspired notes.
+- LadybugDB as a separate graph database for direct who/what/when relationship storage and traversal.
 
-Turso Database is still marked beta by its upstream README, so production hardening must include backups, migration rehearsal, and a compatibility fallback path before real user data depends on it.
+Content is not stored as markdown files. Zettelkasten is a modeling inspiration only.
 
 ## Store Choices
 
 | Concern | Initial Choice | Rationale |
 | --- | --- | --- |
-| Durable records | Turso/Limbo-compatible SQL | Embedded, SQLite-compatible, Rust implementation direction, sync roadmap |
-| Graph relationships | Typed edge tables in the primary store | Keeps who/what/when relationships in the source of truth |
-| Advanced graph traversal | Recursive CTEs and indexed edge queries first | Avoid abandoned or immature graph dependencies in v1 |
-| Full-text content search | Adapter seam; use built-in compatible FTS when available | Search capabilities differ across engines and bindings, so isolate it |
+| Durable content | Turso/Limbo-compatible SQL | Embedded/lightweight direction, SQLite-compatible habits, sync roadmap |
+| Notes/zettels | SQL tables | Queryable, syncable, auditable; no `.md` file store |
+| Graph relationships | LadybugDB | Direct graph database with property graph/Cypher direction |
+| Cross-store consistency | Operation log plus idempotent graph writes | Keeps offline sync and graph projection recoverable |
+| Full-text content search | Search adapter over SQL content | Search capabilities differ by engine; isolate behind repository/service contracts |
 | JSON metadata | Portable JSON stored in text columns, upgraded to JSON functions where supported | Avoid coupling core schema to optional extensions |
 | Temporal model | Event log plus `valid_from`, `valid_to`, `observed_at`, `recorded_at` fields | Avoid a separate temporal DB; preserves auditability |
-| Raw artifacts | Filesystem object store with DB references | Keeps large PDFs/media out of hot relational tables |
+| Raw artifacts | Filesystem object store with DB references | Keeps large PDFs/media out of hot relational tables while extracted content goes to SQL |
 | Vector search | Adapter seam; evaluate Turso vector support and alternatives after retrieval tests | Avoid locking into a vector engine before retrieval quality is measured |
+
+## Consistency Model
+
+Turso/Limbo owns content and operation history. LadybugDB owns graph traversal state. Services coordinate writes through repositories:
+
+```text
+write SQL content + operation log
+  -> write graph node/edge facts directly to LadybugDB or enqueue graph update
+  -> record graph projection status
+  -> retry idempotently on failure
+```
+
+Graph nodes and edges must use stable IDs that reference SQL content records where applicable. If LadybugDB is unavailable, writes should still preserve enough operation data to repair or replay graph state.
 
 ## Consequences
 
-- The first backend can run as one Go binary plus local database/files.
+- The backend uses a direct graph database instead of SQL edge tables as the primary graph mechanism.
+- Mobile sync and audit remain grounded in operation logs and SQL content records.
 - The project aligns with Turso/Limbo rather than vanilla SQLite as the preferred database path.
 - SQLite-compatible fallback remains useful for development, tests, and platform gaps.
-- Graph queries are modeled explicitly in the schema instead of outsourced to a graph DB.
-- Search and vector behavior must be isolated behind interfaces because Turso/Limbo features are still evolving.
-- Early production use needs conservative backup and restore procedures because the preferred engine is still evolving.
+- Early production use needs conservative backup and restore procedures for both stores.
+- Cross-store failure handling must be explicit from the beginning.
 
 ## References
 
 - Turso/Limbo repository: https://github.com/tursodatabase/limbo
 - Turso embedded replicas and sync direction: https://docs.turso.tech/features/embedded-replicas/introduction
+- LadybugDB repository: https://github.com/LadybugDB/ladybug
 - Kuzu archived repository notice: https://github.com/kuzudb/kuzu

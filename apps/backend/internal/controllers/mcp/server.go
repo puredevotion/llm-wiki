@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 
@@ -28,17 +27,15 @@ type SearchResult struct {
 // NewHandler exposes the remote MCP endpoint. Tool handlers should call domain services,
 // not storage adapters; the current implementation is a compile-time scaffold.
 func NewHandler(logger *slog.Logger) http.Handler {
-	server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "llm-wiki", Version: "0.1.0"}, nil)
-
-	mcpsdk.AddTool(server, &mcpsdk.Tool{
-		Name:        "kb.search",
-		Description: "Search the knowledge base across zettels, sources, topics, people, teams, and events.",
-	}, func(ctx context.Context, req *mcpsdk.CallToolRequest, input SearchInput) (*mcpsdk.CallToolResult, SearchOutput, error) {
-		logger.InfoContext(ctx, "mcp search requested", "query", input.Query, "limit", input.Limit)
-		return &mcpsdk.CallToolResult{}, SearchOutput{Results: []SearchResult{}}, nil
-	})
+	server := newServer(logger)
 
 	return mcpsdk.NewStreamableHTTPHandler(func(_ *http.Request) *mcpsdk.Server {
 		return server
 	}, nil)
+}
+
+func newServer(logger *slog.Logger) *mcpsdk.Server {
+	server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "llm-wiki", Version: "0.1.0"}, nil)
+	registerSearchTool(server, logger)
+	return server
 }

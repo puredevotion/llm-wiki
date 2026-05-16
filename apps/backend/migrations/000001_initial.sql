@@ -75,21 +75,6 @@ CREATE TABLE IF NOT EXISTS citations (
   created_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS edges (
-  id TEXT PRIMARY KEY,
-  from_kind TEXT NOT NULL,
-  from_id TEXT NOT NULL,
-  edge_type TEXT NOT NULL,
-  to_kind TEXT NOT NULL,
-  to_id TEXT NOT NULL,
-  confidence REAL NOT NULL DEFAULT 1.0,
-  metadata_json TEXT NOT NULL DEFAULT '{}',
-  valid_from TEXT,
-  valid_to TEXT,
-  created_by TEXT REFERENCES actors(id),
-  created_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,
@@ -117,6 +102,19 @@ CREATE TABLE IF NOT EXISTS operations (
   applied_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS graph_events (
+  id TEXT PRIMARY KEY,
+  operation_id TEXT REFERENCES operations(id),
+  event_type TEXT NOT NULL CHECK (event_type IN ('upsert_node', 'delete_node', 'upsert_edge', 'delete_edge')),
+  graph_entity_id TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'applied', 'failed')),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_at TEXT NOT NULL,
+  applied_at TEXT
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS zettels_fts USING fts5(
   title,
   body,
@@ -124,7 +122,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS zettels_fts USING fts5(
   content_rowid='rowid'
 );
 
-CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_kind, from_id, edge_type);
-CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_kind, to_id, edge_type);
 CREATE INDEX IF NOT EXISTS idx_events_time ON events(occurred_at, starts_at, ends_at);
 CREATE INDEX IF NOT EXISTS idx_operations_actor_device ON operations(actor_id, device_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_graph_events_status ON graph_events(status, created_at);

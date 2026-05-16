@@ -4,7 +4,7 @@ Future Kotlin client.
 
 Initial role:
 
-- Fast mobile capture.
-- Offline drafts and outbox buffering.
+- Offline-first mobile capture.
+- Local durable outbox before network sync.
 - Local Turso/Limbo-compatible cache when bindings are ready, with SQLite fallback behind the same interface.
-- Sync through backend endpoints.
+- Sync through backend REST/protobuf endpoints.

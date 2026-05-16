@@ -10,14 +10,14 @@ import (
 	"time"
 
 	"llm-wiki/apps/backend/internal/config"
-	"llm-wiki/apps/backend/internal/httpapi"
+	"llm-wiki/apps/backend/internal/controllers/rest"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg := config.FromEnv()
 
-	server := httpapi.NewServer(cfg, logger)
+	server := rest.NewServer(cfg, logger)
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           server.Handler(),

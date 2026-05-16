@@ -1,5 +1,7 @@
 # Graph Storage
 
-Graph projection adapter.
+LadybugDB-backed graph persistence.
 
-Start with typed edge tables in the primary Turso/Limbo-compatible store. Use indexed edge queries and recursive CTEs before introducing a separate graph database. Kuzu is not a planned dependency because the upstream repository was archived.
+The graph database is a first-class persistence layer for people, teams, topics, events, and relationship traversal. Graph nodes and edges should reference stable IDs from the Turso/Limbo content database where applicable.
+
+Graph writes must be idempotent and repairable from operation/event history.
