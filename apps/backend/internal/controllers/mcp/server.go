@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"llm-wiki/apps/backend/internal/config"
+	"llm-wiki/apps/backend/internal/services"
 )
 
 type SearchInput struct {
@@ -26,16 +28,11 @@ type SearchResult struct {
 
 // NewHandler exposes the remote MCP endpoint. Tool handlers should call domain services,
 // not storage adapters; the current implementation is a compile-time scaffold.
-func NewHandler(logger *slog.Logger) http.Handler {
-	server := newServer(logger)
-
-	return mcpsdk.NewStreamableHTTPHandler(func(_ *http.Request) *mcpsdk.Server {
+func NewHandler(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService) http.Handler {
+	return mcpsdk.NewStreamableHTTPHandler(func(r *http.Request) *mcpsdk.Server {
+		server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "llm-wiki", Version: "0.1.0"}, nil)
+		registerSearchTool(server, logger)
+		registerIngestTool(server, logger, ingestion, cfg.AgentToken)
 		return server
 	}, nil)
-}
-
-func newServer(logger *slog.Logger) *mcpsdk.Server {
-	server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "llm-wiki", Version: "0.1.0"}, nil)
-	registerSearchTool(server, logger)
-	return server
 }

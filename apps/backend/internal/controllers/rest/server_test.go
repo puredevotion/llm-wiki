@@ -170,7 +170,7 @@ func TestUnversionedSyncEndpointsStayUnavailableToProtectMobileContractMigration
 
 func newTestServer() *Server {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewServer(config.Config{HTTPAddr: ":0"}, logger)
+	return NewServer(config.Config{HTTPAddr: ":0"}, logger, nil)
 }
 
 func assertStatus(t *testing.T, res *httptest.ResponseRecorder, expected int) {

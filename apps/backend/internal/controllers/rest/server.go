@@ -8,21 +8,23 @@ import (
 
 	"llm-wiki/apps/backend/internal/config"
 	mcpcontroller "llm-wiki/apps/backend/internal/controllers/mcp"
+	"llm-wiki/apps/backend/internal/services"
 )
 
 type Server struct {
-	cfg    config.Config
-	logger *slog.Logger
+	cfg       config.Config
+	logger    *slog.Logger
+	ingestion *services.IngestionService
 }
 
-func NewServer(cfg config.Config, logger *slog.Logger) *Server {
-	return &Server{cfg: cfg, logger: logger}
+func NewServer(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService) *Server {
+	return &Server{cfg: cfg, logger: logger, ingestion: ingestion}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.health)
-	mux.Handle("/mcp", mcpcontroller.NewHandler(s.logger))
+	mux.Handle("/mcp", mcpcontroller.NewHandler(s.cfg, s.logger, s.ingestion))
 	mux.HandleFunc("/api/v1/sync/operations", s.syncOperations)
 	mux.HandleFunc("/api/v1/sync/changes", s.syncChanges)
 	mux.HandleFunc("/api/v1/sync/bootstrap", s.syncBootstrap)

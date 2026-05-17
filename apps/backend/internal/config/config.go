@@ -4,12 +4,14 @@ import "os"
 
 // Config contains process-level settings. Secrets should come from the environment.
 type Config struct {
-	HTTPAddr string
+	HTTPAddr   string
+	AgentToken string
 }
 
 func FromEnv() Config {
 	return Config{
-		HTTPAddr: envOrDefault("KBASE_HTTP_ADDR", ":8080"),
+		HTTPAddr:   envOrDefault("KBASE_HTTP_ADDR", ":8080"),
+		AgentToken: envOrDefault("KBASE_AGENT_TOKEN", "default-agent-token"),
 	}
 }
 

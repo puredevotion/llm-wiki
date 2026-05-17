@@ -8,10 +8,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"llm-wiki/apps/backend/internal/config"
 )
 
 func TestNewHandlerDocumentsTheRemoteMCPInitializeEndpoint(t *testing.T) {
-	handler := NewHandler(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	cfg := config.Config{AgentToken: "test-token"}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler := NewHandler(cfg, logger, nil)
 	req := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")

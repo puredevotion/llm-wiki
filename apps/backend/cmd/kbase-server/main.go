@@ -11,13 +11,47 @@ import (
 
 	"llm-wiki/apps/backend/internal/config"
 	"llm-wiki/apps/backend/internal/controllers/rest"
+	"llm-wiki/apps/backend/internal/domain"
+	"llm-wiki/apps/backend/internal/services"
 )
+
+// In-memory repositories for bootstrapping until Turso/Limbo is ready
+type memActorRepo struct {
+	actors map[string]*domain.Actor
+}
+
+func (m *memActorRepo) FindByName(_ context.Context, name string) (*domain.Actor, error) {
+	for _, a := range m.actors {
+		if a.DisplayName == name {
+			return a, nil
+		}
+	}
+	return nil, nil
+}
+func (m *memActorRepo) Save(_ context.Context, actor *domain.Actor) error {
+	m.actors[actor.ID] = actor
+	return nil
+}
+
+type memSourceRepo struct{}
+
+func (m *memSourceRepo) Save(_ context.Context, _ *domain.Source) error { return nil }
+
+type memZettelRepo struct{}
+
+func (m *memZettelRepo) Save(_ context.Context, _ *domain.Zettel) error { return nil }
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg := config.FromEnv()
 
-	server := rest.NewServer(cfg, logger)
+	// Bootstrap services with memory repos
+	actorRepo := &memActorRepo{actors: make(map[string]*domain.Actor)}
+	sourceRepo := &memSourceRepo{}
+	zettelRepo := &memZettelRepo{}
+	ingestion := services.NewIngestionService(actorRepo, sourceRepo, zettelRepo)
+
+	server := rest.NewServer(cfg, logger, ingestion)
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           server.Handler(),
