@@ -15,16 +15,17 @@ type Server struct {
 	cfg       config.Config
 	logger    *slog.Logger
 	ingestion *services.IngestionService
+	searchSvc *services.SearchService
 }
 
-func NewServer(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService) *Server {
-	return &Server{cfg: cfg, logger: logger, ingestion: ingestion}
+func NewServer(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService, searchSvc *services.SearchService) *Server {
+	return &Server{cfg: cfg, logger: logger, ingestion: ingestion, searchSvc: searchSvc}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.health)
-	mux.Handle("/mcp", mcpcontroller.NewHandler(s.cfg, s.logger, s.ingestion))
+	mux.Handle("/mcp", mcpcontroller.NewHandler(s.cfg, s.logger, s.ingestion, s.searchSvc))
 	mux.HandleFunc("/api/v1/sync/operations", s.syncOperations)
 	mux.HandleFunc("/api/v1/sync/changes", s.syncChanges)
 	mux.HandleFunc("/api/v1/sync/bootstrap", s.syncBootstrap)

@@ -1,17 +1,46 @@
 package config
 
-import "os"
+import (
+	"log"
+	"os"
 
-// Config contains process-level settings. Secrets should come from the environment.
+	"github.com/joho/godotenv"
+)
+
+// Config contains process-level settings.
 type Config struct {
-	HTTPAddr   string
-	AgentToken string
+	AppEnv      string
+	HTTPAddr    string
+	AgentToken  string
+	TursoDSN    string
+	GraphDBPath string
 }
 
 func FromEnv() Config {
+	// 1. Determine environment
+	appEnv := os.Getenv("APP_ENV")
+	if appEnv == "" {
+		appEnv = "local"
+	}
+
+	// 2. Load corresponding .env file
+	// We try to load .env.{env} first, then fallback to .env
+	envFile := ".env." + appEnv
+	if err := godotenv.Load(envFile); err != nil {
+		// It's okay if the specific env file is missing, we'll try the default .env
+		if err := godotenv.Load(); err != nil {
+			log.Printf("No .env file found, relying on environment variables")
+		}
+	} else {
+		log.Printf("Loaded config from %s", envFile)
+	}
+
 	return Config{
-		HTTPAddr:   envOrDefault("KBASE_HTTP_ADDR", ":8080"),
-		AgentToken: envOrDefault("KBASE_AGENT_TOKEN", "default-agent-token"),
+		AppEnv:      appEnv,
+		HTTPAddr:    envOrDefault("KBASE_HTTP_ADDR", ":8080"),
+		AgentToken:  envOrDefault("KBASE_AGENT_TOKEN", "default-agent-token"),
+		TursoDSN:    envOrDefault("KBASE_TURSO_DSN", "file:kbase.db"),
+		GraphDBPath: envOrDefault("KBASE_GRAPH_DB_PATH", "kbase_graph"),
 	}
 }
 

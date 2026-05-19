@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"llm-wiki/apps/backend/internal/services"
 )
 
 const (
@@ -35,20 +36,36 @@ func normalizeSearchInput(input SearchInput) (SearchInput, error) {
 	return SearchInput{Query: query, Limit: limit}, nil
 }
 
-func registerSearchTool(server *mcpsdk.Server, logger *slog.Logger) {
+func registerSearchTool(server *mcpsdk.Server, logger *slog.Logger, searchSvc *services.SearchService) {
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
 		Name:        "kb.search",
 		Description: "Search the knowledge base across zettels, sources, topics, people, teams, and events.",
-	}, searchToolHandler(logger))
+	}, searchToolHandler(logger, searchSvc))
 }
 
-func searchToolHandler(logger *slog.Logger) func(context.Context, *mcpsdk.CallToolRequest, SearchInput) (*mcpsdk.CallToolResult, SearchOutput, error) {
+func searchToolHandler(logger *slog.Logger, searchSvc *services.SearchService) func(context.Context, *mcpsdk.CallToolRequest, SearchInput) (*mcpsdk.CallToolResult, SearchOutput, error) {
 	return func(ctx context.Context, req *mcpsdk.CallToolRequest, input SearchInput) (*mcpsdk.CallToolResult, SearchOutput, error) {
 		normalized, err := normalizeSearchInput(input)
 		if err != nil {
 			return nil, SearchOutput{}, err
 		}
 		logger.InfoContext(ctx, "mcp search requested", "query", normalized.Query, "limit", normalized.Limit)
-		return &mcpsdk.CallToolResult{}, SearchOutput{Results: []SearchResult{}}, nil
+
+		zettels, err := searchSvc.Search(ctx, normalized.Query, normalized.Limit)
+		if err != nil {
+			return nil, SearchOutput{}, err
+		}
+
+		results := make([]SearchResult, 0, len(zettels))
+		for _, z := range zettels {
+			results = append(results, SearchResult{
+				ID:        z.ID,
+				Kind:      "zettel",
+				Title:     z.Title,
+				Lifecycle: z.Lifecycle,
+			})
+		}
+
+		return &mcpsdk.CallToolResult{}, SearchOutput{Results: results}, nil
 	}
 }

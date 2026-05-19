@@ -16,16 +16,18 @@
 coverage.*
 *.coverprofile
 profile.cov
+*.html
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
-go.work
-go.work.sum
-
-# env file
+# env files
 .env
+.env.*
+!.env.example
+
+# Local libraries and temp folders
+libs/
+test_extract/
+data/
+*.db
 
 # Editor/IDE
 # .idea/

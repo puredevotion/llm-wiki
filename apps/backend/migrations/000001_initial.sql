@@ -122,6 +122,18 @@ CREATE VIRTUAL TABLE IF NOT EXISTS zettels_fts USING fts5(
   content_rowid='rowid'
 );
 
+-- Triggers to keep zettels_fts in sync
+CREATE TRIGGER IF NOT EXISTS zettels_ai AFTER INSERT ON zettels BEGIN
+  INSERT INTO zettels_fts(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+END;
+CREATE TRIGGER IF NOT EXISTS zettels_ad AFTER DELETE ON zettels BEGIN
+  INSERT INTO zettels_fts(zettels_fts, rowid, title, body) VALUES('delete', old.rowid, old.title, old.body);
+END;
+CREATE TRIGGER IF NOT EXISTS zettels_au AFTER UPDATE ON zettels BEGIN
+  INSERT INTO zettels_fts(zettels_fts, rowid, title, body) VALUES('delete', old.rowid, old.title, old.body);
+  INSERT INTO zettels_fts(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+END;
+
 CREATE INDEX IF NOT EXISTS idx_events_time ON events(occurred_at, starts_at, ends_at);
 CREATE INDEX IF NOT EXISTS idx_operations_actor_device ON operations(actor_id, device_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_graph_events_status ON graph_events(status, created_at);

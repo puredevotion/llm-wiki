@@ -6,60 +6,82 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"llm-wiki/apps/backend/internal/config"
 	"llm-wiki/apps/backend/internal/controllers/rest"
-	"llm-wiki/apps/backend/internal/domain"
 	"llm-wiki/apps/backend/internal/services"
+	"llm-wiki/apps/backend/internal/storage/graph"
+	"llm-wiki/apps/backend/internal/storage/turso"
 )
 
-// In-memory repositories for bootstrapping until Turso/Limbo is ready
-type memActorRepo struct {
-	actors map[string]*domain.Actor
-}
-
-func (m *memActorRepo) FindByName(_ context.Context, name string) (*domain.Actor, error) {
-	for _, a := range m.actors {
-		if a.DisplayName == name {
-			return a, nil
-		}
-	}
-	return nil, nil
-}
-func (m *memActorRepo) Save(_ context.Context, actor *domain.Actor) error {
-	m.actors[actor.ID] = actor
-	return nil
-}
-
-type memSourceRepo struct{}
-
-func (m *memSourceRepo) Save(_ context.Context, _ *domain.Source) error { return nil }
-
-type memZettelRepo struct{}
-
-func (m *memZettelRepo) Save(_ context.Context, _ *domain.Zettel) error { return nil }
-
 func main() {
+	if err := run(); err != nil {
+		slog.Error("application failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg := config.FromEnv()
 
-	// Bootstrap services with memory repos
-	actorRepo := &memActorRepo{actors: make(map[string]*domain.Actor)}
-	sourceRepo := &memSourceRepo{}
-	zettelRepo := &memZettelRepo{}
-	ingestion := services.NewIngestionService(actorRepo, sourceRepo, zettelRepo)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	server := rest.NewServer(cfg, logger, ingestion)
+	// 1. Initialize Turso
+	sqlStore, err := turso.NewStore(cfg.TursoDSN)
+	if err != nil {
+		return err
+	}
+	defer sqlStore.Close()
+
+	migrationsPath := os.Getenv("KBASE_MIGRATIONS_PATH")
+	if migrationsPath == "" {
+		migrationsPath = "migrations"
+	}
+	// Auto-migrate Turso
+	schema, err := os.ReadFile(filepath.Join(migrationsPath, "000001_initial.sql"))
+	if err == nil {
+		if err := sqlStore.Migrate(ctx, string(schema)); err != nil {
+			logger.Warn("turso migration failed", "error", err)
+		} else {
+			logger.Info("turso migrated")
+		}
+	}
+
+	// 2. Initialize Graph
+	graphStore, err := graph.NewStore(cfg.GraphDBPath)
+	if err != nil {
+		return err
+	}
+	defer graphStore.Close()
+
+	// Auto-migrate Graph
+	if err := graphStore.Migrate(ctx); err != nil {
+		logger.Warn("graph migration failed", "error", err)
+	} else {
+		logger.Info("graph migrated")
+	}
+
+	// 3. Initialize Services
+	ingestion := services.NewIngestionService(
+		sqlStore.Actors(),
+		sqlStore.Sources(),
+		sqlStore.Zettels(),
+		sqlStore.Topics(),
+		graphStore.Graph(),
+	)
+	searchSvc := services.NewSearchService(sqlStore.Zettels())
+
+	server := rest.NewServer(cfg, logger, ingestion, searchSvc)
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           server.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	go func() {
 		logger.Info("backend listening", "addr", cfg.HTTPAddr)
@@ -74,8 +96,5 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		logger.Error("backend shutdown failed", "error", err)
-		os.Exit(1)
-	}
+	return httpServer.Shutdown(shutdownCtx)
 }

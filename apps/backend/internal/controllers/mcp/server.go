@@ -19,20 +19,23 @@ type SearchOutput struct {
 }
 
 type SearchResult struct {
-	ID      string  `json:"id" jsonschema:"entity identifier"`
-	Kind    string  `json:"kind" jsonschema:"source, zettel, topic, person, team, or event"`
-	Title   string  `json:"title" jsonschema:"human-readable result title"`
-	Snippet string  `json:"snippet" jsonschema:"short citation-friendly excerpt"`
-	Score   float64 `json:"score" jsonschema:"relevance score from 0 to 1"`
+	ID        string  `json:"id" jsonschema:"entity identifier"`
+	Kind      string  `json:"kind" jsonschema:"source, zettel, topic, person, team, or event"`
+	Title     string  `json:"title" jsonschema:"human-readable result title"`
+	Snippet   string  `json:"snippet" jsonschema:"short citation-friendly excerpt"`
+	Lifecycle string  `json:"lifecycle,omitempty" jsonschema:"project, evergreen, or ephemeral"`
+	Score     float64 `json:"score" jsonschema:"relevance score from 0 to 1"`
 }
 
-// NewHandler exposes the remote MCP endpoint. Tool handlers should call domain services,
-// not storage adapters; the current implementation is a compile-time scaffold.
-func NewHandler(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService) http.Handler {
-	return mcpsdk.NewStreamableHTTPHandler(func(r *http.Request) *mcpsdk.Server {
+func NewHandler(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService, searchSvc *services.SearchService) http.Handler {
+	return mcpsdk.NewStreamableHTTPHandler(mcpServerFactory(cfg, logger, ingestion, searchSvc), nil)
+}
+
+func mcpServerFactory(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService, searchSvc *services.SearchService) func(r *http.Request) *mcpsdk.Server {
+	return func(r *http.Request) *mcpsdk.Server {
 		server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "llm-wiki", Version: "0.1.0"}, nil)
-		registerSearchTool(server, logger)
+		registerSearchTool(server, logger, searchSvc)
 		registerIngestTool(server, logger, ingestion, cfg.AgentToken)
 		return server
-	}, nil)
+	}
 }
