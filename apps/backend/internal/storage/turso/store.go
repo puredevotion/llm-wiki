@@ -47,6 +47,8 @@ func (s *Store) Actors() repositories.ActorRepository   { return &actorRepo{s} }
 func (s *Store) Sources() repositories.SourceRepository { return &sourceRepo{s} }
 func (s *Store) Zettels() repositories.ZettelRepository { return &zettelRepo{s} }
 func (s *Store) Topics() repositories.TopicRepository   { return &topicRepo{s} }
+func (s *Store) Operations() repositories.OperationRepository { return &operationRepo{s} }
+func (s *Store) Identity() repositories.IdentityRepository { return &identityRepo{s} }
 
 type actorRepo struct{ *Store }
 
@@ -176,4 +178,132 @@ func (r *topicRepo) Save(ctx context.Context, t *domain.Topic) error {
 		t.ID, parentID, t.Name, t.CreatedAt.Format(time.RFC3339), time.Now().Format(time.RFC3339),
 	)
 	return err
+}
+
+type identityRepo struct{ *Store }
+
+func (r *identityRepo) SaveTeam(ctx context.Context, t *domain.Team) error {
+	metadata, _ := json.Marshal(t.Metadata)
+	var orgID sql.NullString
+	if t.OrgID != "" {
+		orgID.String = t.OrgID
+		orgID.Valid = true
+	}
+	_, err := r.db.ExecContext(ctx,
+		"INSERT INTO teams (id, org_id, name, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, metadata_json=excluded.metadata_json, updated_at=excluded.updated_at",
+		t.ID, orgID, t.Name, string(metadata), t.CreatedAt.Format(time.RFC3339), time.Now().Format(time.RFC3339),
+	)
+	return err
+}
+
+func (r *identityRepo) SaveOrganization(ctx context.Context, o *domain.Organization) error {
+	metadata, _ := json.Marshal(o.Metadata)
+	_, err := r.db.ExecContext(ctx,
+		"INSERT INTO organizations (id, name, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, metadata_json=excluded.metadata_json, updated_at=excluded.updated_at",
+		o.ID, o.Name, string(metadata), o.CreatedAt.Format(time.RFC3339), time.Now().Format(time.RFC3339),
+	)
+	return err
+}
+
+func (r *identityRepo) AddTeamMember(ctx context.Context, m *domain.TeamMember) error {
+	_, err := r.db.ExecContext(ctx,
+		"INSERT INTO team_members (team_id, actor_id, role, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(team_id, actor_id) DO UPDATE SET role=excluded.role",
+		m.TeamID, m.ActorID, m.Role, m.CreatedAt.Format(time.RFC3339),
+	)
+	return err
+}
+
+func (r *identityRepo) FindTeamByName(ctx context.Context, name string) (*domain.Team, error) {
+	row := r.db.QueryRowContext(ctx, "SELECT id, org_id, name, metadata_json, created_at FROM teams WHERE name = ?", name)
+	var t domain.Team
+	var orgID sql.NullString
+	var metadata string
+	var createdAt string
+	err := row.Scan(&t.ID, &orgID, &t.Name, &metadata, &createdAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if orgID.Valid {
+		t.OrgID = orgID.String
+	}
+	json.Unmarshal([]byte(metadata), &t.Metadata)
+	t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+	return &t, nil
+}
+
+type operationRepo struct{ *Store }
+
+func (r *operationRepo) Save(ctx context.Context, op *domain.Operation) error {
+	var appliedAt *string
+	if op.AppliedAt != nil {
+		s := op.AppliedAt.Format(time.RFC3339)
+		appliedAt = &s
+	}
+	_, err := r.db.ExecContext(ctx,
+		"INSERT INTO operations (id, actor_id, device_id, entity_kind, entity_id, operation_type, payload_json, base_version, status, created_at, applied_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET status=excluded.status, applied_at=excluded.applied_at",
+		op.ID, op.ActorID, op.DeviceID, op.EntityKind, op.EntityID, op.OperationType, string(op.Payload), op.BaseVersion, string(op.Status), op.CreatedAt.Format(time.RFC3339), appliedAt,
+	)
+	return err
+}
+
+func (r *operationRepo) FindByID(ctx context.Context, id string) (*domain.Operation, error) {
+	row := r.db.QueryRowContext(ctx, "SELECT id, actor_id, device_id, entity_kind, entity_id, operation_type, payload_json, base_version, status, created_at, applied_at FROM operations WHERE id = ?", id)
+	var op domain.Operation
+	var payload string
+	var createdAt string
+	var appliedAt sql.NullString
+	err := row.Scan(&op.ID, &op.ActorID, &op.DeviceID, &op.EntityKind, &op.EntityID, &op.OperationType, &payload, &op.BaseVersion, &op.Status, &createdAt, &appliedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	op.Payload = json.RawMessage(payload)
+	op.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+	if appliedAt.Valid {
+		t, _ := time.Parse(time.RFC3339, appliedAt.String)
+		op.AppliedAt = &t
+	}
+	return &op, nil
+}
+
+func (r *operationRepo) FetchChanges(ctx context.Context, cursor string, limit int) ([]*domain.Operation, error) {
+	query := "SELECT id, actor_id, device_id, entity_kind, entity_id, operation_type, payload_json, base_version, status, created_at, applied_at FROM operations WHERE status = 'applied'"
+	args := []any{}
+	if cursor != "" {
+		query += " AND applied_at > ?"
+		args = append(args, cursor)
+	}
+	query += " ORDER BY applied_at ASC LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []*domain.Operation
+	for rows.Next() {
+		var op domain.Operation
+		var payload string
+		var createdAt string
+		var appliedAt sql.NullString
+		err := rows.Scan(&op.ID, &op.ActorID, &op.DeviceID, &op.EntityKind, &op.EntityID, &op.OperationType, &payload, &op.BaseVersion, &op.Status, &createdAt, &appliedAt)
+		if err != nil {
+			return nil, err
+		}
+		op.Payload = json.RawMessage(payload)
+		op.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+		if appliedAt.Valid {
+			t, _ := time.Parse(time.RFC3339, appliedAt.String)
+			op.AppliedAt = &t
+		}
+		results = append(results, &op)
+	}
+	return results, nil
 }

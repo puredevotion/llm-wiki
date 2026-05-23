@@ -29,18 +29,15 @@ func TestNewHandler(t *testing.T) {
 	cfg := config.Config{AgentToken: "test-token"}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	searchSvc := services.NewSearchService(&mockZettelSearchRepo{})
-	handler := NewHandler(cfg, logger, nil, searchSvc)
+	handler := NewHandler(cfg, logger, nil, searchSvc, nil)
 	if handler == nil {
 		t.Fatal("expected non-nil handler")
 	}
 
 	t.Run("Trigger Factory", func(t *testing.T) {
-		// NewStreamableHTTPHandler from MCP SDK might trigger the factory on POST or SSE.
-		// We send a request that looks like an initial SSE or POST request.
 		req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 		res := httptest.NewRecorder()
 		handler.ServeHTTP(res, req)
-		// We don't care about the status, just that the factory was called.
 	})
 }
 

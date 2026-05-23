@@ -24,10 +24,23 @@ type TopicRepository interface {
 	Save(ctx context.Context, topic *domain.Topic) error
 }
 
+type IdentityRepository interface {
+	SaveTeam(ctx context.Context, team *domain.Team) error
+	SaveOrganization(ctx context.Context, org *domain.Organization) error
+	AddTeamMember(ctx context.Context, member *domain.TeamMember) error
+	FindTeamByName(ctx context.Context, name string) (*domain.Team, error)
+}
+
 type GraphRepository interface {
 	// CreateRelationship creates a typed edge between two nodes.
 	// Nodes are identified by their stable IDs from SQL stores.
 	CreateRelationship(ctx context.Context, fromID, fromLabel, toID, toLabel, relType string) error
 	// UpsertNode ensures a node exists with the given ID and label.
 	UpsertNode(ctx context.Context, id, label string, properties map[string]any) error
+}
+
+type OperationRepository interface {
+	Save(ctx context.Context, op *domain.Operation) error
+	FindByID(ctx context.Context, id string) (*domain.Operation, error)
+	FetchChanges(ctx context.Context, cursor string, limit int) ([]*domain.Operation, error)
 }
