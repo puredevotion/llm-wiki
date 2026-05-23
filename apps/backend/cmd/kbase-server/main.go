@@ -73,10 +73,12 @@ func run() error {
 		sqlStore.Zettels(),
 		sqlStore.Topics(),
 		graphStore.Graph(),
+		sqlStore.Operations(),
 	)
 	searchSvc := services.NewSearchService(sqlStore.Zettels())
+	syncSvc := services.NewSyncService(sqlStore.Operations(), sqlStore.Zettels(), sqlStore.Topics())
 
-	server := rest.NewServer(cfg, logger, ingestion, searchSvc)
+	server := rest.NewServer(cfg, logger, ingestion, searchSvc, syncSvc)
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           server.Handler(),
