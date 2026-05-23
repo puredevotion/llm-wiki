@@ -345,6 +345,52 @@ func TestOperationRepo(t *testing.T) {
 	})
 }
 
+func TestIdentityRepo(t *testing.T) {
+	store, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := store.Identity()
+	ctx := context.Background()
+
+	t.Run("Save Team and Organization", func(t *testing.T) {
+		org := &domain.Organization{ID: "o1", Name: "Acme"}
+		if err := repo.SaveOrganization(ctx, org); err != nil {
+			t.Fatalf("failed to save org: %v", err)
+		}
+
+		team := &domain.Team{ID: "t1", OrgID: "o1", Name: "Core"}
+		if err := repo.SaveTeam(ctx, team); err != nil {
+			t.Fatalf("failed to save team: %v", err)
+		}
+
+		found, err := repo.FindTeamByName(ctx, "Core")
+		if err != nil {
+			t.Fatalf("failed to find team: %v", err)
+		}
+		if found == nil || found.ID != "t1" {
+			t.Errorf("expected team t1, got %v", found)
+		}
+	})
+
+	t.Run("Team Membership", func(t *testing.T) {
+		actor := &domain.Actor{ID: "a1", DisplayName: "Alice", Kind: "person"}
+		store.Actors().Save(ctx, actor)
+
+		member := &domain.TeamMember{TeamID: "t1", ActorID: "a1", Role: "lead", CreatedAt: time.Now()}
+		if err := repo.AddTeamMember(ctx, member); err != nil {
+			t.Fatalf("failed to add member: %v", err)
+		}
+	})
+
+	t.Run("Find Team Error", func(t *testing.T) {
+		store.Close()
+		_, err := repo.FindTeamByName(ctx, "Core")
+		if err == nil {
+			t.Error("expected error on closed db")
+		}
+	})
+}
+
 func TestNewStore_Error(t *testing.T) {
 	t.Run("Bad Driver", func(t *testing.T) {
 		_, err := NewStore("unknown_driver://bad")

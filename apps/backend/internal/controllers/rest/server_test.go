@@ -50,6 +50,35 @@ func (m *mockTopicRepo) FindByName(ctx context.Context, name string) (*domain.To
 }
 func (m *mockTopicRepo) Save(ctx context.Context, topic *domain.Topic) error { return nil }
 
+type mockActorRepo struct{}
+
+func (m *mockActorRepo) FindByName(ctx context.Context, name string) (*domain.Actor, error) {
+	return nil, nil
+}
+func (m *mockActorRepo) Save(ctx context.Context, actor *domain.Actor) error { return nil }
+
+type mockIdentityRepo struct{}
+
+func (m *mockIdentityRepo) SaveTeam(ctx context.Context, team *domain.Team) error { return nil }
+func (m *mockIdentityRepo) SaveOrganization(ctx context.Context, org *domain.Organization) error {
+	return nil
+}
+func (m *mockIdentityRepo) AddTeamMember(ctx context.Context, member *domain.TeamMember) error {
+	return nil
+}
+func (m *mockIdentityRepo) FindTeamByName(ctx context.Context, name string) (*domain.Team, error) {
+	return nil, nil
+}
+
+type mockGraphRepo struct{}
+
+func (m *mockGraphRepo) UpsertNode(ctx context.Context, id, label string, properties map[string]any) error {
+	return nil
+}
+func (m *mockGraphRepo) CreateRelationship(ctx context.Context, fromID, fromLabel, toID, toLabel, relType string) error {
+	return nil
+}
+
 func TestHealthEndpoint(t *testing.T) {
 	server := newTestServer()
 	
@@ -147,9 +176,14 @@ func newTestServer() *Server {
 	opRepo := &mockOpRepo{ops: make(map[string]*domain.Operation)}
 	zettelRepo := &mockZettelSearchRepo{}
 	topicRepo := &mockTopicRepo{}
-	syncSvc := services.NewSyncService(opRepo, zettelRepo, topicRepo)
+	actorRepo := &mockActorRepo{}
+	identityRepo := &mockIdentityRepo{}
+	graphRepo := &mockGraphRepo{}
 	
-	return NewServer(config.Config{HTTPAddr: ":0"}, logger, nil, nil, syncSvc)
+	syncSvc := services.NewSyncService(opRepo, zettelRepo, topicRepo)
+	idSvc := services.NewIdentityService(actorRepo, identityRepo, graphRepo, opRepo)
+	
+	return NewServer(config.Config{HTTPAddr: ":0"}, logger, nil, nil, syncSvc, idSvc)
 }
 
 func assertStatus(t *testing.T, res *httptest.ResponseRecorder, expected int) {

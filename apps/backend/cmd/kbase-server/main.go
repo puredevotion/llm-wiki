@@ -77,8 +77,9 @@ func run() error {
 	)
 	searchSvc := services.NewSearchService(sqlStore.Zettels())
 	syncSvc := services.NewSyncService(sqlStore.Operations(), sqlStore.Zettels(), sqlStore.Topics())
+	idSvc := services.NewIdentityService(sqlStore.Actors(), sqlStore.Identity(), graphStore.Graph(), sqlStore.Operations())
 
-	server := rest.NewServer(cfg, logger, ingestion, searchSvc, syncSvc)
+	server := rest.NewServer(cfg, logger, ingestion, searchSvc, syncSvc, idSvc)
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           server.Handler(),
