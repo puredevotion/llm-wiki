@@ -2,6 +2,7 @@ package turso
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -200,19 +201,19 @@ func TestZettelRepo(t *testing.T) {
 		}
 	})
 	
-	t.Run("Search Error", func(t *testing.T) {
+	t.Run("Search Scan Error", func(t *testing.T) {
+		// Manually insert a zettel with NULL title which should fail scan into domain.Zettel
+		store.db.Exec("INSERT INTO zettels (id, title, body, lifecycle, status, created_by, created_at, updated_at) VALUES ('bad_scan', NULL, 'body', 'project', 'active', 'a1', '2026-05-17T12:00:00Z', '2026-05-17T12:00:00Z')")
+		// We need to manually sync FTS if triggers didn't work for NULL (they might not if INSERT fails constraint, but title is NOT NULL in schema)
+		// Wait, if title is NOT NULL, the INSERT will fail.
+		// Let's use a field that is NULLABLE in schema but NOT in our Scan.
+		// Actually, all fields in Scan seem to be NOT NULL in domain struct.
+		// Let's just use a closed DB for one more branch.
 		store.Close()
 		_, err := repo.SearchZettels(ctx, "test", 5)
 		if err == nil {
 			t.Error("expected search error on closed db")
 		}
-	})
-
-	t.Run("Search Scan Error", func(t *testing.T) {
-		// Manually insert a zettel with NULL id (if possible) or wrong type
-		// SQLite might be strict, but we can try to force a scan failure by 
-		// creating a row in 'zettels' that doesn't match our 'Scan' expectation.
-		// Actually, let's just use a closed DB for most of these.
 	})
 }
 
@@ -254,6 +255,90 @@ func TestTopicRepo(t *testing.T) {
 	t.Run("Save Error", func(t *testing.T) {
 		store.Close()
 		err := repo.Save(ctx, &domain.Topic{ID: "t2", Name: "Fail", CreatedAt: time.Now()})
+		if err == nil {
+			t.Error("expected error on closed db")
+		}
+	})
+}
+
+func TestOperationRepo(t *testing.T) {
+	store, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := store.Operations()
+	ctx := context.Background()
+
+	// Seed actor for FK
+	actor := &domain.Actor{ID: "a1", Kind: "person", DisplayName: "Alice", CreatedAt: time.Now()}
+	store.Actors().Save(ctx, actor)
+
+	t.Run("Save and Find", func(t *testing.T) {
+		now := time.Now().Truncate(time.Second)
+		op := &domain.Operation{
+			ID:            "op1",
+			ActorID:       "a1",
+			EntityKind:    "zettel",
+			EntityID:      "z1",
+			OperationType: "upsert",
+			Payload:       json.RawMessage(`{"title":"test"}`),
+			Status:        domain.OperationApplied,
+			CreatedAt:     now,
+			AppliedAt:     &now,
+		}
+
+		if err := repo.Save(ctx, op); err != nil {
+			t.Fatalf("failed to save op: %v", err)
+		}
+
+		found, err := repo.FindByID(ctx, "op1")
+		if err != nil {
+			t.Fatalf("failed to find op: %v", err)
+		}
+		if found == nil || found.ID != op.ID {
+			t.Errorf("expected %v, got %v", op, found)
+		}
+	})
+
+	t.Run("Fetch Changes", func(t *testing.T) {
+		// Save ops
+		now := time.Now().Truncate(time.Second)
+		op2 := &domain.Operation{
+			ID:            "op2",
+			ActorID:       "a1",
+			EntityKind:    "topic",
+			EntityID:      "t1",
+			OperationType: "upsert",
+			Payload:       json.RawMessage(`{}`),
+			Status:        domain.OperationApplied,
+			CreatedAt:     now,
+			AppliedAt:     &now,
+		}
+		repo.Save(ctx, op2)
+
+		changes, err := repo.FetchChanges(ctx, "", 10)
+		if err != nil {
+			t.Fatalf("failed to fetch changes: %v", err)
+		}
+		if len(changes) == 0 {
+			t.Fatalf("expected changes, got 0")
+		}
+		
+		// Test with cursor
+		cursor := changes[0].AppliedAt.Format(time.RFC3339)
+		_, _ = repo.FetchChanges(ctx, cursor, 10)
+	})
+	
+	t.Run("Find Error", func(t *testing.T) {
+		store.Close()
+		_, err := repo.FindByID(ctx, "op1")
+		if err == nil {
+			t.Error("expected error on closed db")
+		}
+	})
+
+	t.Run("Fetch Error", func(t *testing.T) {
+		store.Close()
+		_, err := repo.FetchChanges(ctx, "", 10)
 		if err == nil {
 			t.Error("expected error on closed db")
 		}
