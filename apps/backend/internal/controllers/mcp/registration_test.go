@@ -26,7 +26,7 @@ func TestToolRegistration(t *testing.T) {
 	})
 
 	t.Run("Server Factory", func(t *testing.T) {
-		factory := mcpServerFactory(config.Config{AgentToken: "t"}, logger, nil, nil, nil)
+		factory := mcpServerFactory(config.Config{AgentToken: "t"}, logger, nil, nil, nil, nil)
 		server := factory(nil)
 		if server == nil {
 			t.Error("expected non-nil server from factory")

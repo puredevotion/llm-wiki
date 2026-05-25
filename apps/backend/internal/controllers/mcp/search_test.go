@@ -45,7 +45,7 @@ func TestNewHandler(t *testing.T) {
 	cfg := config.Config{AgentToken: "test-token"}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	searchSvc := services.NewSearchService(&mockZettelSearchSvcRepo{}, &mockVectorRepo{}, &mockSearchEmbeddingsClient{})
-	handler := NewHandler(cfg, logger, nil, searchSvc, nil)
+	handler := NewHandler(cfg, logger, nil, searchSvc, nil, nil)
 	if handler == nil {
 		t.Fatal("expected non-nil handler")
 	}

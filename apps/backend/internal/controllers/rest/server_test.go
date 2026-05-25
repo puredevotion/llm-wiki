@@ -237,8 +237,9 @@ func setupServer() (*Server, *mockOpRepo, *mockZettelSearchRepo, *services.SyncS
 	syncSvc := services.NewSyncService(opRepo, zettelRepo, topicRepo, vRepo, embeds)
 	idSvc := services.NewIdentityService(actorRepo, identityRepo, graphRepo, opRepo)
 	searchSvc := services.NewSearchService(zettelRepo, vRepo, embeds)
+	timeSvc := services.NewTimelineService(nil, graphRepo, opRepo)
 	
-	return NewServer(config.Config{HTTPAddr: ":0"}, logger, nil, searchSvc, syncSvc, idSvc), opRepo, zettelRepo, syncSvc
+	return NewServer(config.Config{HTTPAddr: ":0"}, logger, nil, searchSvc, syncSvc, idSvc, timeSvc), opRepo, zettelRepo, syncSvc
 }
 
 func assertStatus(t *testing.T, res *httptest.ResponseRecorder, expected int) {

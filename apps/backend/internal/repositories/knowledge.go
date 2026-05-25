@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"time"
 	"llm-wiki/apps/backend/internal/domain"
 )
 
@@ -30,6 +31,11 @@ type IdentityRepository interface {
 	SaveOrganization(ctx context.Context, org *domain.Organization) error
 	AddTeamMember(ctx context.Context, member *domain.TeamMember) error
 	FindTeamByName(ctx context.Context, name string) (*domain.Team, error)
+}
+
+type TimelineRepository interface {
+	Save(ctx context.Context, event *domain.Event) error
+	Fetch(ctx context.Context, startsAt, endsAt *time.Time, limit int) ([]*domain.Event, error)
 }
 
 type GraphRepository interface {

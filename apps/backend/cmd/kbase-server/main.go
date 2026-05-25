@@ -83,8 +83,9 @@ func run() error {
 	searchSvc := services.NewSearchService(sqlStore.Zettels(), sqlStore.Vectors(), embeds)
 	syncSvc := services.NewSyncService(sqlStore.Operations(), sqlStore.Zettels(), sqlStore.Topics(), sqlStore.Vectors(), embeds)
 	idSvc := services.NewIdentityService(sqlStore.Actors(), sqlStore.Identity(), graphStore.Graph(), sqlStore.Operations())
+	timeSvc := services.NewTimelineService(sqlStore.Timeline(), graphStore.Graph(), sqlStore.Operations())
 
-	server := rest.NewServer(cfg, logger, ingestion, searchSvc, syncSvc, idSvc)
+	server := rest.NewServer(cfg, logger, ingestion, searchSvc, syncSvc, idSvc, timeSvc)
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           server.Handler(),

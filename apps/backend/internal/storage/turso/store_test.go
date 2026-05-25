@@ -438,11 +438,70 @@ func TestVectorRepo(t *testing.T) {
 		}
 	})
 
+	t.Run("Search Different Lengths", func(t *testing.T) {
+		repo.Upsert(ctx, "vlen", "zettel", domain.Vector{1, 2}, "m1")
+		_, err := repo.Search(ctx, "zettel", domain.Vector{1}, 5)
+		if err != nil {
+			t.Fatalf("search should not fail on length mismatch: %v", err)
+		}
+	})
+
+	t.Run("Search Zero Norm", func(t *testing.T) {
+		repo.Upsert(ctx, "vzero", "zettel", domain.Vector{0, 0}, "m1")
+		repo.Search(ctx, "zettel", domain.Vector{1, 1}, 5)
+	})
+
+	t.Run("Search Empty Vectors", func(t *testing.T) {
+		repo.Search(ctx, "zettel", domain.Vector{}, 5)
+	})
+
 	t.Run("Search Error", func(t *testing.T) {
 		s2, c2 := setupTestDB(t)
 		r2 := s2.Vectors()
 		c2()
 		_, err := r2.Search(ctx, "zettel", domain.Vector{1, 1}, 5)
+		if err == nil {
+			t.Error("expected error on closed db")
+		}
+	})
+}
+
+func TestTimelineRepo(t *testing.T) {
+	store, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := store.Timeline()
+	ctx := context.Background()
+
+	// FK actor
+	store.Actors().Save(ctx, &domain.Actor{ID: "a1", Kind: "person", DisplayName: "Alice", CreatedAt: time.Now()})
+
+	t.Run("Save and Fetch", func(t *testing.T) {
+		now := time.Now().Truncate(time.Second)
+		e := &domain.Event{
+			ID:         "e1",
+			Kind:       domain.EventMeeting,
+			Title:      "Meeting 1",
+			OccurredAt: &now,
+			RecordedAt: now,
+			CreatedBy:  "a1",
+		}
+		if err := repo.Save(ctx, e); err != nil {
+			t.Fatalf("failed to save event: %v", err)
+		}
+
+		events, err := repo.Fetch(ctx, &now, nil, 10)
+		if err != nil {
+			t.Fatalf("failed to fetch events: %v", err)
+		}
+		if len(events) == 0 || events[0].ID != "e1" {
+			t.Errorf("expected event e1, got %v", events)
+		}
+	})
+
+	t.Run("Fetch Error", func(t *testing.T) {
+		store.Close()
+		_, err := repo.Fetch(ctx, nil, nil, 10)
 		if err == nil {
 			t.Error("expected error on closed db")
 		}
