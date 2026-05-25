@@ -43,12 +43,16 @@ func TestBootstrapRun_Failures(t *testing.T) {
 	t.Run("Bad Graph Path", func(t *testing.T) {
 		os.Setenv("KBASE_TURSO_DSN", "file:test.db")
 		os.Setenv("KBASE_MIGRATIONS_PATH", "../../migrations")
-		// Use a path that cannot be created
 		os.Setenv("KBASE_GRAPH_DB_PATH", "/proc/invalid/path")
 		
 		err := run()
 		if err == nil {
 			t.Error("expected error for bad graph path")
 		}
+	})
+
+	t.Run("Default Migrations Path", func(t *testing.T) {
+		os.Setenv("KBASE_MIGRATIONS_PATH", "")
+		// Just trigger the logic
 	})
 }

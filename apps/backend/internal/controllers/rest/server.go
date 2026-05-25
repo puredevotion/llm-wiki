@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"llm-wiki/apps/backend/internal/config"
 	mcpcontroller "llm-wiki/apps/backend/internal/controllers/mcp"
+	"llm-wiki/apps/backend/internal/domain"
 	"llm-wiki/apps/backend/internal/services"
 )
 
@@ -16,16 +18,20 @@ type Server struct {
 	logger    *slog.Logger
 	ingestion *services.IngestionService
 	searchSvc *services.SearchService
+	syncSvc   *services.SyncService
+	idSvc     *services.IdentityService
+	timeSvc   *services.TimelineService
 }
 
-func NewServer(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService, searchSvc *services.SearchService) *Server {
-	return &Server{cfg: cfg, logger: logger, ingestion: ingestion, searchSvc: searchSvc}
+func NewServer(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService, searchSvc *services.SearchService, syncSvc *services.SyncService, idSvc *services.IdentityService, timeSvc *services.TimelineService) *Server {
+	return &Server{cfg: cfg, logger: logger, ingestion: ingestion, searchSvc: searchSvc, syncSvc: syncSvc, idSvc: idSvc, timeSvc: timeSvc}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.health)
-	mux.Handle("/mcp", mcpcontroller.NewHandler(s.cfg, s.logger, s.ingestion, s.searchSvc))
+	mux.Handle("/mcp", mcpcontroller.NewHandler(s.cfg, s.logger, s.ingestion, s.searchSvc, s.idSvc, s.timeSvc))
+
 	mux.HandleFunc("/api/v1/sync/operations", s.syncOperations)
 	mux.HandleFunc("/api/v1/sync/changes", s.syncChanges)
 	mux.HandleFunc("/api/v1/sync/bootstrap", s.syncBootstrap)
@@ -46,7 +52,21 @@ func (s *Server) syncOperations(w http.ResponseWriter, r *http.Request) {
 		writeMethodNotAllowed(w, http.MethodPost)
 		return
 	}
-	writeError(w, http.StatusNotImplemented, "not_implemented", "Sync operation push is not implemented yet.")
+
+	var batch domain.SyncBatch
+	if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to decode sync batch.")
+		return
+	}
+
+	results, err := s.syncSvc.ProcessBatch(r.Context(), batch)
+	if err != nil {
+		s.logger.Error("failed to process sync batch", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to process operations.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, successEnvelope{Data: results})
 }
 
 func (s *Server) syncChanges(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +74,24 @@ func (s *Server) syncChanges(w http.ResponseWriter, r *http.Request) {
 		writeMethodNotAllowed(w, http.MethodGet)
 		return
 	}
-	writeError(w, http.StatusNotImplemented, "not_implemented", "Sync change pull is not implemented yet.")
+
+	cursor := r.URL.Query().Get("cursor")
+	limitStr := r.URL.Query().Get("limit")
+	limit := 50
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil {
+			limit = l
+		}
+	}
+
+	changes, err := s.syncSvc.FetchChanges(r.Context(), cursor, limit)
+	if err != nil {
+		s.logger.Error("failed to fetch sync changes", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to fetch changes.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, successEnvelope{Data: changes})
 }
 
 func (s *Server) syncBootstrap(w http.ResponseWriter, r *http.Request) {

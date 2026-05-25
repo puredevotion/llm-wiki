@@ -37,13 +37,24 @@ func (s *Store) Migrate(ctx context.Context) error {
 	// Initial schema
 	schemaQueries := []string{
 		"CREATE NODE TABLE Person(id STRING, name STRING, PRIMARY KEY (id))",
+		"CREATE NODE TABLE Team(id STRING, name STRING, PRIMARY KEY (id))",
+		"CREATE NODE TABLE Organization(id STRING, name STRING, PRIMARY KEY (id))",
 		"CREATE NODE TABLE Topic(id STRING, name STRING, PRIMARY KEY (id))",
 		"CREATE NODE TABLE Project(id STRING, name STRING, PRIMARY KEY (id))",
 		"CREATE NODE TABLE Source(id STRING, title STRING, kind STRING, PRIMARY KEY (id))",
 		"CREATE NODE TABLE Zettel(id STRING, title STRING, lifecycle STRING, PRIMARY KEY (id))",
+		"CREATE NODE TABLE Event(id STRING, title STRING, kind STRING, PRIMARY KEY (id))",
 		"CREATE REL TABLE AUTHORED_BY(FROM Source TO Person)",
 		"CREATE REL TABLE RELATED_TO(FROM Source TO Topic, FROM Source TO Project, FROM Zettel TO Topic)",
 		"CREATE REL TABLE DERIVED_FROM(FROM Zettel TO Source)",
+		"CREATE REL TABLE MEMBER_OF(FROM Person TO Team)",
+		"CREATE REL TABLE PART_OF(FROM Team TO Organization)",
+		"CREATE REL TABLE REPORTS_TO(FROM Person TO Person)",
+		"CREATE REL TABLE HAPPENED_DURING(FROM Event TO Project)",
+		"CREATE REL TABLE INVOLVES(FROM Event TO Person)",
+		"CREATE REL TABLE PRECEDES(FROM Event TO Event)",
+		"CREATE REL TABLE FOLLOWS(FROM Event TO Event)",
+		"CREATE REL TABLE REFERS_TO(FROM Event TO Zettel)",
 	}
 
 	for _, q := range schemaQueries {

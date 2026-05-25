@@ -9,11 +9,12 @@ import (
 
 // Config contains process-level settings.
 type Config struct {
-	AppEnv      string
-	HTTPAddr    string
-	AgentToken  string
-	TursoDSN    string
-	GraphDBPath string
+	AppEnv       string
+	HTTPAddr     string
+	AgentToken   string
+	TursoDSN     string
+	GraphDBPath  string
+	OpenAIAPIKey string
 }
 
 func FromEnv() Config {
@@ -36,11 +37,12 @@ func FromEnv() Config {
 	}
 
 	return Config{
-		AppEnv:      appEnv,
-		HTTPAddr:    envOrDefault("KBASE_HTTP_ADDR", ":8080"),
-		AgentToken:  envOrDefault("KBASE_AGENT_TOKEN", "default-agent-token"),
-		TursoDSN:    envOrDefault("KBASE_TURSO_DSN", "file:kbase.db"),
-		GraphDBPath: envOrDefault("KBASE_GRAPH_DB_PATH", "kbase_graph"),
+		AppEnv:       appEnv,
+		HTTPAddr:     envOrDefault("KBASE_HTTP_ADDR", ":8080"),
+		AgentToken:   envOrDefault("KBASE_AGENT_TOKEN", "default-agent-token"),
+		TursoDSN:     envOrDefault("KBASE_TURSO_DSN", "file:kbase.db"),
+		GraphDBPath:  envOrDefault("KBASE_GRAPH_DB_PATH", "kbase_graph"),
+		OpenAIAPIKey: os.Getenv("OPENAI_API_KEY"),
 	}
 }
 
