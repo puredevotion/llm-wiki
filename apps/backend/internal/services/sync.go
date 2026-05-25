@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"llm-wiki/apps/backend/internal/clients/embeddings"
 	"llm-wiki/apps/backend/internal/domain"
 	"llm-wiki/apps/backend/internal/repositories"
 )
@@ -14,17 +15,23 @@ type SyncService struct {
 	ops     repositories.OperationRepository
 	zettels repositories.ZettelRepository
 	topics  repositories.TopicRepository
+	vectors repositories.VectorRepository
+	embeds  embeddings.Client
 }
 
 func NewSyncService(
 	ops repositories.OperationRepository,
 	zettels repositories.ZettelRepository,
 	topics repositories.TopicRepository,
+	vectors repositories.VectorRepository,
+	embeds embeddings.Client,
 ) *SyncService {
 	return &SyncService{
 		ops:     ops,
 		zettels: zettels,
 		topics:  topics,
+		vectors: vectors,
+		embeds:  embeds,
 	}
 }
 
@@ -110,7 +117,19 @@ func (s *SyncService) applyZettelOp(ctx context.Context, op *domain.Operation) e
 		z.CreatedAt = z.UpdatedAt
 	}
 
-	return s.zettels.Save(ctx, &z)
+	if err := s.zettels.Save(ctx, &z); err != nil {
+		return err
+	}
+
+	// Semantic Projection
+	if s.embeds != nil && s.vectors != nil {
+		text := fmt.Sprintf("%s\n\n%s", z.Title, z.Body)
+		vec, err := s.embeds.Generate(ctx, text)
+		if err == nil {
+			_ = s.vectors.Upsert(ctx, z.ID, "zettel", vec, "text-embedding-3-small")
+		}
+	}
+	return nil
 }
 
 func (s *SyncService) applyTopicOp(ctx context.Context, op *domain.Operation) error {
@@ -124,5 +143,16 @@ func (s *SyncService) applyTopicOp(ctx context.Context, op *domain.Operation) er
 		t.CreatedAt = time.Now()
 	}
 
-	return s.topics.Save(ctx, &t)
+	if err := s.topics.Save(ctx, &t); err != nil {
+		return err
+	}
+
+	// Semantic Projection
+	if s.embeds != nil && s.vectors != nil {
+		vec, err := s.embeds.Generate(ctx, t.Name)
+		if err == nil {
+			_ = s.vectors.Upsert(ctx, t.ID, "topic", vec, "text-embedding-3-small")
+		}
+	}
+	return nil
 }

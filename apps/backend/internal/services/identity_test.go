@@ -86,9 +86,24 @@ func TestIdentityService(t *testing.T) {
 		}
 	})
 
+	t.Run("Save Organization", func(t *testing.T) {
+		o := &domain.Organization{Name: "Acme"}
+		if err := identity.SaveOrganization(ctx, o); err != nil {
+			t.Error("failed to save org")
+		}
+	})
+
 	t.Run("Set Manager", func(t *testing.T) {
 		if err := svc.SetManager(ctx, "a1", "a2"); err != nil {
 			t.Fatalf("SetManager failed: %v", err)
+		}
+	})
+
+	t.Run("Set Manager Graph Fail", func(t *testing.T) {
+		graph.fail = true
+		defer func() { graph.fail = false }()
+		if err := svc.SetManager(ctx, "a1", "a2"); err == nil {
+			t.Error("expected error")
 		}
 	})
 

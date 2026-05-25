@@ -64,7 +64,7 @@ func run() error {
 	gRepo := graphStore.Graph()
 
 	// Initialize ingestion with ops for consistency, though not used here
-	ingestion := services.NewIngestionService(actors, sqlStore.Sources(), sqlStore.Zettels(), topics, gRepo, sqlStore.Operations())
+	ingestion := services.NewIngestionService(actors, sqlStore.Sources(), sqlStore.Zettels(), topics, gRepo, sqlStore.Operations(), sqlStore.Vectors(), nil)
 	_ = ingestion // Placeholder if we need to call it
 
 	system := &domain.Actor{

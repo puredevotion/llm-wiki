@@ -119,6 +119,15 @@ CREATE TABLE IF NOT EXISTS operations (
   applied_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS embeddings (
+  entity_id TEXT NOT NULL,
+  entity_kind TEXT NOT NULL,
+  vector_json TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (entity_id, entity_kind)
+);
+
 CREATE TABLE IF NOT EXISTS graph_events (
   id TEXT PRIMARY KEY,
   operation_id TEXT REFERENCES operations(id),
