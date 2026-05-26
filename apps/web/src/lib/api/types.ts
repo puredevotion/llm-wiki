@@ -29,3 +29,21 @@ export interface TimelineEvent {
   created_by: string;
   metadata: Record<string, any>;
 }
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  name: string;
+  kind?: string;
+}
+
+export interface GraphLink {
+  source: string;
+  target: string;
+  type: string;
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  links: GraphLink[];
+}

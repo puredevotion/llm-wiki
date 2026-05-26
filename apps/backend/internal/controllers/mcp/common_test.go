@@ -59,6 +59,9 @@ func (m *mockGraphRepo) CreateRelationship(ctx context.Context, fromID, fromLabe
 	}
 	return nil
 }
+func (m *mockGraphRepo) FetchGraph(ctx context.Context) (*domain.GraphData, error) {
+	return &domain.GraphData{}, nil
+}
 
 type mockOpRepo struct{}
 

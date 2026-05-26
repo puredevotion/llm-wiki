@@ -44,6 +44,8 @@ type GraphRepository interface {
 	CreateRelationship(ctx context.Context, fromID, fromLabel, toID, toLabel, relType string) error
 	// UpsertNode ensures a node exists with the given ID and label.
 	UpsertNode(ctx context.Context, id, label string, properties map[string]any) error
+	// FetchGraph returns the entire graph for visualization.
+	FetchGraph(ctx context.Context) (*domain.GraphData, error)
 }
 
 type OperationRepository interface {

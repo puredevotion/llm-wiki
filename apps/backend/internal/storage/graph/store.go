@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	lb "github.com/LadybugDB/go-ladybug"
+	"llm-wiki/apps/backend/internal/domain"
 	"llm-wiki/apps/backend/internal/repositories"
 )
 
@@ -127,4 +128,84 @@ func (r *graphRepo) CreateRelationship(ctx context.Context, fromID, fromLabel, t
 		return fmt.Errorf("failed to create relationship %s:%s -> %s:%s [%s]: %w", fromLabel, fromID, toLabel, toID, relType, err)
 	}
 	return nil
+}
+
+func (r *graphRepo) FetchGraph(ctx context.Context) (*domain.GraphData, error) {
+	conn, err := lb.OpenConnection(r.db)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	data := &domain.GraphData{
+		Nodes: []domain.GraphNode{},
+		Links: []domain.GraphLink{},
+	}
+
+	// 1. Fetch Nodes
+	tables := []struct {
+		label string
+		prop  string
+	}{
+		{"Person", "name"},
+		{"Team", "name"},
+		{"Organization", "name"},
+		{"Topic", "name"},
+		{"Project", "name"},
+		{"Source", "title"},
+		{"Zettel", "title"},
+		{"Event", "title"},
+	}
+
+	for _, t := range tables {
+		query := fmt.Sprintf("MATCH (n:%s) RETURN n.id, n.%s", t.label, t.prop)
+		res, err := conn.Query(query)
+		if err != nil {
+			continue
+		}
+		for res.HasNext() {
+			tuple, err := res.Next()
+			if err != nil {
+				continue
+			}
+			idVal, _ := tuple.GetValue(0)
+			nameVal, _ := tuple.GetValue(1)
+			id, _ := idVal.(string)
+			name, _ := nameVal.(string)
+			
+			data.Nodes = append(data.Nodes, domain.GraphNode{
+				ID:    id,
+				Label: t.label,
+				Name:  name,
+			})
+		}
+		res.Close()
+	}
+
+	// 2. Fetch Relationships
+	relQuery := "MATCH (a)-[r]->(b) RETURN a.id, b.id, label(r)"
+	res, err := conn.Query(relQuery)
+	if err == nil {
+		for res.HasNext() {
+			tuple, err := res.Next()
+			if err != nil {
+				continue
+			}
+			srcVal, _ := tuple.GetValue(0)
+			dstVal, _ := tuple.GetValue(1)
+			typeVal, _ := tuple.GetValue(2)
+			src, _ := srcVal.(string)
+			dst, _ := dstVal.(string)
+			rType, _ := typeVal.(string)
+			
+			data.Links = append(data.Links, domain.GraphLink{
+				Source: src,
+				Target: dst,
+				Type:   rType,
+			})
+		}
+		res.Close()
+	}
+
+	return data, nil
 }

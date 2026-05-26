@@ -125,6 +125,12 @@ func (m *mockGraphRepo) CreateRelationship(ctx context.Context, fromID, fromLabe
 	m.edges = append(m.edges, fmt.Sprintf("%s:%s:%s:%s:%s", fromID, fromLabel, toID, toLabel, relType))
 	return nil
 }
+func (m *mockGraphRepo) FetchGraph(ctx context.Context) (*domain.GraphData, error) {
+	if m.fail {
+		return nil, fmt.Errorf("fail")
+	}
+	return &domain.GraphData{}, nil
+}
 
 type mockOpRepo struct {
 	ops  map[string]*domain.Operation

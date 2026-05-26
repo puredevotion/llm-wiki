@@ -1,57 +1,70 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
+import { apiFetch } from '@/lib/api/client'
+import type { GraphData } from '@/lib/api/types'
 import ForceGraph2D from 'react-force-graph-2d'
-import { useMemo } from 'react'
 
 export const Route = createFileRoute('/graph')({
   component: GraphView,
 })
 
+const LABEL_COLORS: Record<string, string> = {
+  Person: '#3b82f6', // blue-500
+  Team: '#6366f1',   // indigo-500
+  Organization: '#8b5cf6', // purple-500
+  Topic: '#a855f7',  // purple-500
+  Project: '#10b981', // emerald-500
+  Source: '#f59e0b', // amber-500
+  Zettel: '#f97316', // orange-500
+  Event: '#ef4444',  // red-500
+}
+
 function GraphView() {
-  const data = useMemo(() => {
-    return {
-      nodes: [
-        { id: '1', name: 'Alice', val: 10, group: 'Person' },
-        { id: '2', name: 'Go Backend', val: 15, group: 'Project' },
-        { id: '3', name: 'Vector Search', val: 8, group: 'Topic' },
-        { id: '4', name: 'Zettel 1', val: 5, group: 'Zettel' },
-        { id: '5', name: 'Zettel 2', val: 5, group: 'Zettel' },
-      ],
-      links: [
-        { source: '1', target: '2' },
-        { source: '2', target: '3' },
-        { source: '4', target: '3' },
-        { source: '5', target: '3' },
-      ]
-    }
-  }, [])
+  const { data, isLoading } = useQuery({
+    queryKey: ['graph'],
+    queryFn: () => apiFetch<GraphData>('/graph'),
+  })
 
   return (
     <div className="h-[calc(100vh-120px)] border rounded-xl bg-background overflow-hidden relative">
-      <div className="absolute top-4 left-4 z-10 bg-background/80 backdrop-blur-sm border rounded-lg p-3 shadow-sm">
-        <h2 className="text-sm font-semibold mb-2">Knowledge Graph</h2>
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-xs">
-            <div className="w-3 h-3 rounded-full bg-blue-500" /> Person
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            <div className="w-3 h-3 rounded-full bg-green-500" /> Project
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            <div className="w-3 h-3 rounded-full bg-purple-500" /> Topic
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            <div className="w-3 h-3 rounded-full bg-orange-500" /> Zettel
-          </div>
+      <div className="absolute top-4 left-4 z-10 bg-background/80 backdrop-blur-sm border rounded-lg p-4 shadow-sm pointer-events-none">
+        <h2 className="text-sm font-bold mb-3">Knowledge Graph</h2>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          {Object.entries(LABEL_COLORS).map(([label, color]) => (
+            <div key={label} className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+              {label}
+            </div>
+          ))}
         </div>
       </div>
-      <ForceGraph2D
-        graphData={data}
-        nodeLabel="name"
-        nodeAutoColorBy="group"
-        linkDirectionalArrowLength={3.5}
-        linkDirectionalArrowRelPos={1}
-        backgroundColor="#00000000"
-      />
+
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-20">
+          <p className="text-muted-foreground animate-pulse">Mapping connections...</p>
+        </div>
+      )}
+
+      {data && (
+        <ForceGraph2D
+          graphData={data}
+          nodeLabel={(node: any) => `${node.label}: ${node.name}`}
+          nodeColor={(node: any) => LABEL_COLORS[node.label] || '#94a3b8'}
+          nodeRelSize={6}
+          linkDirectionalArrowLength={4}
+          linkDirectionalArrowRelPos={1}
+          linkCurvature={0.25}
+          linkColor={() => 'rgba(148, 163, 184, 0.2)'}
+          backgroundColor="#00000000"
+        />
+      )}
+
+      {!isLoading && (!data || data.nodes.length === 0) && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-12">
+          <p className="text-muted-foreground mb-1 font-semibold text-lg">The void is vast</p>
+          <p className="text-sm text-muted-foreground">Start adding notes or events to populate the graph.</p>
+        </div>
+      )}
     </div>
   )
 }
