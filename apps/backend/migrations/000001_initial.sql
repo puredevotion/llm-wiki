@@ -12,12 +12,29 @@ CREATE TABLE IF NOT EXISTS actors (
   created_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS teams (
+CREATE TABLE IF NOT EXISTS organizations (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   metadata_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS teams (
+  id TEXT PRIMARY KEY,
+  org_id TEXT REFERENCES organizations(id),
+  name TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS team_members (
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  actor_id TEXT NOT NULL REFERENCES actors(id),
+  role TEXT NOT NULL DEFAULT 'member',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (team_id, actor_id)
 );
 
 CREATE TABLE IF NOT EXISTS topics (
@@ -100,6 +117,15 @@ CREATE TABLE IF NOT EXISTS operations (
   status TEXT NOT NULL CHECK (status IN ('pending', 'applied', 'rejected')),
   created_at TEXT NOT NULL,
   applied_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS embeddings (
+  entity_id TEXT NOT NULL,
+  entity_kind TEXT NOT NULL,
+  vector_json TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (entity_id, entity_kind)
 );
 
 CREATE TABLE IF NOT EXISTS graph_events (

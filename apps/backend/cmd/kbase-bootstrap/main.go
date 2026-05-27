@@ -11,6 +11,7 @@ import (
 
 	"llm-wiki/apps/backend/internal/config"
 	"llm-wiki/apps/backend/internal/domain"
+	"llm-wiki/apps/backend/internal/services"
 	"llm-wiki/apps/backend/internal/storage/graph"
 	"llm-wiki/apps/backend/internal/storage/turso"
 )
@@ -61,6 +62,10 @@ func run() error {
 	actors := sqlStore.Actors()
 	topics := sqlStore.Topics()
 	gRepo := graphStore.Graph()
+
+	// Initialize ingestion with ops for consistency, though not used here
+	ingestion := services.NewIngestionService(actors, sqlStore.Sources(), sqlStore.Zettels(), topics, gRepo, sqlStore.Operations(), sqlStore.Vectors(), nil)
+	_ = ingestion // Placeholder if we need to call it
 
 	system := &domain.Actor{
 		ID:          "actor_system",

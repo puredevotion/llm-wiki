@@ -13,6 +13,7 @@ import (
 	"llm-wiki/apps/backend/internal/config"
 	"llm-wiki/apps/backend/internal/controllers/rest"
 	"llm-wiki/apps/backend/internal/services"
+	"llm-wiki/apps/backend/internal/clients/embeddings"
 	"llm-wiki/apps/backend/internal/storage/graph"
 	"llm-wiki/apps/backend/internal/storage/turso"
 )
@@ -67,16 +68,25 @@ func run() error {
 	}
 
 	// 3. Initialize Services
+	embeds := embeddings.NewOpenAIClient(cfg.OpenAIAPIKey)
+	
 	ingestion := services.NewIngestionService(
 		sqlStore.Actors(),
 		sqlStore.Sources(),
 		sqlStore.Zettels(),
 		sqlStore.Topics(),
 		graphStore.Graph(),
+		sqlStore.Operations(),
+		sqlStore.Vectors(),
+		embeds,
 	)
-	searchSvc := services.NewSearchService(sqlStore.Zettels())
+	searchSvc := services.NewSearchService(sqlStore.Zettels(), sqlStore.Vectors(), embeds)
+	syncSvc := services.NewSyncService(sqlStore.Operations(), sqlStore.Zettels(), sqlStore.Topics(), sqlStore.Vectors(), embeds)
+	idSvc := services.NewIdentityService(sqlStore.Actors(), sqlStore.Identity(), graphStore.Graph(), sqlStore.Operations())
+	timeSvc := services.NewTimelineService(sqlStore.Timeline(), graphStore.Graph(), sqlStore.Operations())
+	graphSvc := services.NewGraphService(graphStore.Graph())
 
-	server := rest.NewServer(cfg, logger, ingestion, searchSvc)
+	server := rest.NewServer(cfg, logger, ingestion, searchSvc, syncSvc, idSvc, timeSvc, graphSvc)
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           server.Handler(),
