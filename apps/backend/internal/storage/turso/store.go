@@ -279,6 +279,36 @@ func (r *timelineRepo) Save(ctx context.Context, e *domain.Event) error {
 	return err
 }
 
+func (r *timelineRepo) FindByID(ctx context.Context, id string) (*domain.Event, error) {
+	row := r.db.QueryRowContext(ctx, "SELECT id, kind, title, body, occurred_at, starts_at, ends_at, recorded_at, created_by, metadata_json FROM events WHERE id = ?", id)
+	var e domain.Event
+	var kind, recordedAt, metadata string
+	var occAt, sAt, eAt sql.NullString
+	err := row.Scan(&e.ID, &kind, &e.Title, &e.Body, &occAt, &sAt, &eAt, &recordedAt, &e.CreatedBy, &metadata)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	e.Kind = domain.EventKind(kind)
+	e.RecordedAt, _ = time.Parse(time.RFC3339, recordedAt)
+	json.Unmarshal([]byte(metadata), &e.Metadata)
+	if occAt.Valid {
+		t, _ := time.Parse(time.RFC3339, occAt.String)
+		e.OccurredAt = &t
+	}
+	if sAt.Valid {
+		t, _ := time.Parse(time.RFC3339, sAt.String)
+		e.StartsAt = &t
+	}
+	if eAt.Valid {
+		t, _ := time.Parse(time.RFC3339, eAt.String)
+		e.EndsAt = &t
+	}
+	return &e, nil
+}
+
 func (r *timelineRepo) Fetch(ctx context.Context, startsAt, endsAt *time.Time, limit int) ([]*domain.Event, error) {
 	query := "SELECT id, kind, title, body, occurred_at, starts_at, ends_at, recorded_at, created_by, metadata_json FROM events WHERE 1=1"
 	var args []any

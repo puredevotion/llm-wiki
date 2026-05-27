@@ -35,6 +35,7 @@ type IdentityRepository interface {
 
 type TimelineRepository interface {
 	Save(ctx context.Context, event *domain.Event) error
+	FindByID(ctx context.Context, id string) (*domain.Event, error)
 	Fetch(ctx context.Context, startsAt, endsAt *time.Time, limit int) ([]*domain.Event, error)
 }
 

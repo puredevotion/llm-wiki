@@ -13,6 +13,9 @@ import { Route as ZettelsRouteImport } from './routes/zettels'
 import { Route as TimelineRouteImport } from './routes/timeline'
 import { Route as GraphRouteImport } from './routes/graph'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ZettelsIndexRouteImport } from './routes/zettels.index'
+import { Route as ZettelsZettelIdRouteImport } from './routes/zettels.$zettelId'
+import { Route as EventsEventIdRouteImport } from './routes/events.$eventId'
 
 const ZettelsRoute = ZettelsRouteImport.update({
   id: '/zettels',
@@ -34,39 +37,84 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ZettelsIndexRoute = ZettelsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ZettelsRoute,
+} as any)
+const ZettelsZettelIdRoute = ZettelsZettelIdRouteImport.update({
+  id: '/$zettelId',
+  path: '/$zettelId',
+  getParentRoute: () => ZettelsRoute,
+} as any)
+const EventsEventIdRoute = EventsEventIdRouteImport.update({
+  id: '/events/$eventId',
+  path: '/events/$eventId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/graph': typeof GraphRoute
   '/timeline': typeof TimelineRoute
-  '/zettels': typeof ZettelsRoute
+  '/zettels': typeof ZettelsRouteWithChildren
+  '/events/$eventId': typeof EventsEventIdRoute
+  '/zettels/$zettelId': typeof ZettelsZettelIdRoute
+  '/zettels/': typeof ZettelsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/graph': typeof GraphRoute
   '/timeline': typeof TimelineRoute
-  '/zettels': typeof ZettelsRoute
+  '/events/$eventId': typeof EventsEventIdRoute
+  '/zettels/$zettelId': typeof ZettelsZettelIdRoute
+  '/zettels': typeof ZettelsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/graph': typeof GraphRoute
   '/timeline': typeof TimelineRoute
-  '/zettels': typeof ZettelsRoute
+  '/zettels': typeof ZettelsRouteWithChildren
+  '/events/$eventId': typeof EventsEventIdRoute
+  '/zettels/$zettelId': typeof ZettelsZettelIdRoute
+  '/zettels/': typeof ZettelsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/graph' | '/timeline' | '/zettels'
+  fullPaths:
+    | '/'
+    | '/graph'
+    | '/timeline'
+    | '/zettels'
+    | '/events/$eventId'
+    | '/zettels/$zettelId'
+    | '/zettels/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/graph' | '/timeline' | '/zettels'
-  id: '__root__' | '/' | '/graph' | '/timeline' | '/zettels'
+  to:
+    | '/'
+    | '/graph'
+    | '/timeline'
+    | '/events/$eventId'
+    | '/zettels/$zettelId'
+    | '/zettels'
+  id:
+    | '__root__'
+    | '/'
+    | '/graph'
+    | '/timeline'
+    | '/zettels'
+    | '/events/$eventId'
+    | '/zettels/$zettelId'
+    | '/zettels/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   GraphRoute: typeof GraphRoute
   TimelineRoute: typeof TimelineRoute
-  ZettelsRoute: typeof ZettelsRoute
+  ZettelsRoute: typeof ZettelsRouteWithChildren
+  EventsEventIdRoute: typeof EventsEventIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,14 +147,49 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/zettels/': {
+      id: '/zettels/'
+      path: '/'
+      fullPath: '/zettels/'
+      preLoaderRoute: typeof ZettelsIndexRouteImport
+      parentRoute: typeof ZettelsRoute
+    }
+    '/zettels/$zettelId': {
+      id: '/zettels/$zettelId'
+      path: '/$zettelId'
+      fullPath: '/zettels/$zettelId'
+      preLoaderRoute: typeof ZettelsZettelIdRouteImport
+      parentRoute: typeof ZettelsRoute
+    }
+    '/events/$eventId': {
+      id: '/events/$eventId'
+      path: '/events/$eventId'
+      fullPath: '/events/$eventId'
+      preLoaderRoute: typeof EventsEventIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
+
+interface ZettelsRouteChildren {
+  ZettelsZettelIdRoute: typeof ZettelsZettelIdRoute
+  ZettelsIndexRoute: typeof ZettelsIndexRoute
+}
+
+const ZettelsRouteChildren: ZettelsRouteChildren = {
+  ZettelsZettelIdRoute: ZettelsZettelIdRoute,
+  ZettelsIndexRoute: ZettelsIndexRoute,
+}
+
+const ZettelsRouteWithChildren =
+  ZettelsRoute._addFileChildren(ZettelsRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   GraphRoute: GraphRoute,
   TimelineRoute: TimelineRoute,
-  ZettelsRoute: ZettelsRoute,
+  ZettelsRoute: ZettelsRouteWithChildren,
+  EventsEventIdRoute: EventsEventIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

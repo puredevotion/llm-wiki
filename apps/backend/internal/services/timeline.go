@@ -73,6 +73,10 @@ func (s *TimelineService) FetchTimeline(ctx context.Context, startsAt, endsAt *t
 	return s.events.Fetch(ctx, startsAt, endsAt, limit)
 }
 
+func (s *TimelineService) GetEvent(ctx context.Context, id string) (*domain.Event, error) {
+	return s.events.FindByID(ctx, id)
+}
+
 func (s *TimelineService) RelateEvent(ctx context.Context, eventID, targetID, targetLabel, relType string) error {
 	// Identity relationship in Graph
 	// Valid rel types: HAPPENED_DURING, INVOLVES, PRECEDES, FOLLOWS, MENTIONED_IN

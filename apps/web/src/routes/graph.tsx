@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api/client'
 import type { GraphData } from '@/lib/api/types'
@@ -20,10 +20,19 @@ const LABEL_COLORS: Record<string, string> = {
 }
 
 function GraphView() {
+  const navigate = useNavigate()
   const { data, isLoading } = useQuery({
     queryKey: ['graph'],
     queryFn: () => apiFetch<GraphData>('/graph'),
   })
+
+  const handleNodeClick = (node: any) => {
+    if (node.label === 'Zettel') {
+      navigate({ to: '/zettels/$zettelId', params: { zettelId: node.id } })
+    } else if (node.label === 'Event') {
+      navigate({ to: '/events/$eventId', params: { eventId: node.id } })
+    }
+  }
 
   return (
     <div className="h-[calc(100vh-120px)] border rounded-xl bg-background overflow-hidden relative">
@@ -51,6 +60,7 @@ function GraphView() {
           nodeLabel={(node: any) => `${node.label}: ${node.name}`}
           nodeColor={(node: any) => LABEL_COLORS[node.label] || '#94a3b8'}
           nodeRelSize={6}
+          onNodeClick={handleNodeClick}
           linkDirectionalArrowLength={4}
           linkDirectionalArrowRelPos={1}
           linkCurvature={0.25}

@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"llm-wiki/apps/backend/internal/config"
 	mcpcontroller "llm-wiki/apps/backend/internal/controllers/mcp"
@@ -44,6 +46,150 @@ func (s *Server) getGraph(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(data)
 }
 
+func (s *Server) getSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	limitStr := r.URL.Query().Get("limit")
+	limit := 10
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil {
+			limit = l
+		}
+	}
+
+	if query == "" {
+		http.Error(w, "missing query", http.StatusBadRequest)
+		return
+	}
+
+	results, err := s.searchSvc.Search(r.Context(), query, limit)
+	if err != nil {
+		s.logger.Error("failed to search", "query", query, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Filter by lifecycle if provided
+	lifecycle := r.URL.Query().Get("lifecycle")
+	if lifecycle != "" {
+		filtered := make([]*domain.SearchResult, 0)
+		for _, res := range results {
+			if res.Lifecycle == lifecycle {
+				filtered = append(filtered, res)
+			}
+		}
+		results = filtered
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
+
+func (s *Server) getTimeline(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	startsAtStr := r.URL.Query().Get("starts_at")
+	endsAtStr := r.URL.Query().Get("ends_at")
+	limitStr := r.URL.Query().Get("limit")
+	kind := r.URL.Query().Get("kind")
+
+	var startsAt, endsAt *time.Time
+	if startsAtStr != "" {
+		t, _ := time.Parse(time.RFC3339, startsAtStr)
+		startsAt = &t
+	}
+	if endsAtStr != "" {
+		t, _ := time.Parse(time.RFC3339, endsAtStr)
+		endsAt = &t
+	}
+
+	limit := 50
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil {
+			limit = l
+		}
+	}
+
+	events, err := s.timeSvc.FetchTimeline(r.Context(), startsAt, endsAt, limit)
+	if err != nil {
+		s.logger.Error("failed to get timeline", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if kind != "" {
+		filtered := make([]*domain.Event, 0)
+		for _, e := range events {
+			if string(e.Kind) == kind {
+				filtered = append(filtered, e)
+			}
+		}
+		events = filtered
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(events)
+}
+
+func (s *Server) getZettel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/zettels/")
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+
+	z, err := s.syncSvc.GetZettel(r.Context(), id)
+	if err != nil {
+		s.logger.Error("failed to get zettel", "id", id, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if z == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(z)
+}
+
+func (s *Server) getEvent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/events/")
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+
+	e, err := s.timeSvc.GetEvent(r.Context(), id)
+	if err != nil {
+		s.logger.Error("failed to get event", "id", id, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if e == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(e)
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.health)
@@ -53,6 +199,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/sync/changes", s.syncChanges)
 	mux.HandleFunc("/api/v1/sync/bootstrap", s.syncBootstrap)
 	mux.HandleFunc("/api/v1/graph", s.getGraph)
+	mux.HandleFunc("/api/v1/search", s.getSearch)
+	mux.HandleFunc("/api/v1/timeline", s.getTimeline)
+	mux.HandleFunc("/api/v1/zettels/", s.getZettel)
+	mux.HandleFunc("/api/v1/events/", s.getEvent)
 	mux.HandleFunc("/api//", s.notFound)
 
 	return requestLogger(s.logger, mux)
