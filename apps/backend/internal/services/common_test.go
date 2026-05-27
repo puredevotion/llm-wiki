@@ -33,6 +33,20 @@ func (m *mockActorRepo) Save(ctx context.Context, actor *domain.Actor) error {
 	return nil
 }
 
+func (m *mockActorRepo) List(ctx context.Context, limit int) ([]*domain.Actor, error) {
+	if m.fail {
+		return nil, fmt.Errorf("fail")
+	}
+	var results []*domain.Actor
+	for _, a := range m.actors {
+		results = append(results, a)
+		if len(results) >= limit {
+			break
+		}
+	}
+	return results, nil
+}
+
 type mockSourceRepo struct {
 	sources map[string]*domain.Source
 	fail    bool
@@ -98,6 +112,46 @@ func (m *mockTopicRepo) Save(ctx context.Context, topic *domain.Topic) error {
 	}
 	m.topics[topic.ID] = topic
 	return nil
+}
+
+type mockIdentityRepo struct {
+	teams map[string]*domain.Team
+	fail  bool
+}
+
+func (m *mockIdentityRepo) SaveTeam(ctx context.Context, team *domain.Team) error {
+	if m.fail {
+		return fmt.Errorf("fail")
+	}
+	m.teams[team.ID] = team
+	return nil
+}
+func (m *mockIdentityRepo) SaveOrganization(ctx context.Context, org *domain.Organization) error {
+	return nil
+}
+func (m *mockIdentityRepo) AddTeamMember(ctx context.Context, member *domain.TeamMember) error {
+	return nil
+}
+func (m *mockIdentityRepo) FindTeamByName(ctx context.Context, name string) (*domain.Team, error) {
+	for _, t := range m.teams {
+		if t.Name == name {
+			return t, nil
+		}
+	}
+	return nil, nil
+}
+func (m *mockIdentityRepo) ListTeams(ctx context.Context, limit int) ([]*domain.Team, error) {
+	if m.fail {
+		return nil, fmt.Errorf("fail")
+	}
+	var results []*domain.Team
+	for _, t := range m.teams {
+		results = append(results, t)
+		if len(results) >= limit {
+			break
+		}
+	}
+	return results, nil
 }
 
 type mockGraphRepo struct {

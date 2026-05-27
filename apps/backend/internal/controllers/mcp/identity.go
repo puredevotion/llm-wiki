@@ -13,28 +13,24 @@ import (
 type IdentityAction string
 
 const (
-	ActionCreateActor  IdentityAction = "create_actor"
-	ActionCreateTeam   IdentityAction = "create_team"
-	ActionAddMember    IdentityAction = "add_member"
-	ActionSetManager   IdentityAction = "set_manager"
+	ActionCreateActor IdentityAction = "create_actor"
+	ActionCreateTeam  IdentityAction = "create_team"
+	ActionAddMember   IdentityAction = "add_member"
+	ActionSetManager  IdentityAction = "set_manager"
 )
 
 type IdentityInput struct {
 	Token  string         `json:"token" jsonschema:"agent api token"`
 	Action IdentityAction `json:"action" jsonschema:"the identity management action to perform"`
-	
-	// Actor fields
-	ActorDisplayName string `json:"actor_name,omitempty" jsonschema:"display name for the new actor"`
-	ActorKind        string `json:"actor_kind,omitempty" jsonschema:"person, agent, or service"`
-	
-	// Team fields
-	TeamName string `json:"team_name,omitempty" jsonschema:"name for the new team"`
-	OrgID    string `json:"org_id,omitempty" jsonschema:"optional organization ID"`
-	
-	// Membership / Management fields
+
+	// Full entity objects
+	Actor *domain.Actor `json:"actor,omitempty" jsonschema:"full actor data for create_actor"`
+	Team  *domain.Team  `json:"team,omitempty" jsonschema:"full team data for create_team"`
+
+	// Flat fields for convenience / other actions
 	TeamID    string `json:"team_id,omitempty" jsonschema:"ID of the team"`
 	ActorID   string `json:"actor_id,omitempty" jsonschema:"ID of the actor"`
-	ManagerID string `json:"manager_id,omitempty" jsonschema:"ID of the manager (for set_manager)"`
+	TargetID  string `json:"target_id,omitempty" jsonschema:"ID of the manager/target"`
 	Role      string `json:"role,omitempty" jsonschema:"member, lead, etc."`
 }
 
@@ -58,24 +54,22 @@ func identityToolHandler(logger *slog.Logger, idSvc *services.IdentityService, a
 
 		switch input.Action {
 		case ActionCreateActor:
-			actor := &domain.Actor{
-				Kind:        input.ActorKind,
-				DisplayName: input.ActorDisplayName,
+			if input.Actor == nil {
+				return nil, IdentityOutput{}, fmt.Errorf("missing actor data")
 			}
-			if err := idSvc.CreateActor(ctx, actor); err != nil {
+			if err := idSvc.CreateActor(ctx, input.Actor); err != nil {
 				return nil, IdentityOutput{}, err
 			}
-			return &mcpsdk.CallToolResult{}, IdentityOutput{ID: actor.ID, Status: "actor_created"}, nil
+			return &mcpsdk.CallToolResult{}, IdentityOutput{ID: input.Actor.ID, Status: "actor_created"}, nil
 
 		case ActionCreateTeam:
-			team := &domain.Team{
-				Name:  input.TeamName,
-				OrgID: input.OrgID,
+			if input.Team == nil {
+				return nil, IdentityOutput{}, fmt.Errorf("missing team data")
 			}
-			if err := idSvc.UpsertTeam(ctx, team); err != nil {
+			if err := idSvc.UpsertTeam(ctx, input.Team); err != nil {
 				return nil, IdentityOutput{}, err
 			}
-			return &mcpsdk.CallToolResult{}, IdentityOutput{ID: team.ID, Status: "team_created"}, nil
+			return &mcpsdk.CallToolResult{}, IdentityOutput{ID: input.Team.ID, Status: "team_created"}, nil
 
 		case ActionAddMember:
 			if err := idSvc.AddTeamMember(ctx, input.TeamID, input.ActorID, input.Role); err != nil {
@@ -84,7 +78,7 @@ func identityToolHandler(logger *slog.Logger, idSvc *services.IdentityService, a
 			return &mcpsdk.CallToolResult{}, IdentityOutput{Status: "member_added"}, nil
 
 		case ActionSetManager:
-			if err := idSvc.SetManager(ctx, input.ActorID, input.ManagerID); err != nil {
+			if err := idSvc.SetManager(ctx, input.ActorID, input.TargetID); err != nil {
 				return nil, IdentityOutput{}, err
 			}
 			return &mcpsdk.CallToolResult{}, IdentityOutput{Status: "manager_set"}, nil

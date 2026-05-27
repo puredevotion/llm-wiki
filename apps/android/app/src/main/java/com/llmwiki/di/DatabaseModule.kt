@@ -32,4 +32,10 @@ object DatabaseModule {
 
     @Provides
     fun provideSyncDao(db: LLMWikiDatabase): SyncDao = db.syncDao()
+
+    @Provides
+    fun provideActorDao(db: LLMWikiDatabase): ActorDao = db.actorDao()
+
+    @Provides
+    fun provideTeamDao(db: LLMWikiDatabase): TeamDao = db.teamDao()
 }

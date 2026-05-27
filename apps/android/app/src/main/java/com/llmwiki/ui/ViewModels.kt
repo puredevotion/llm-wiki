@@ -38,3 +38,38 @@ class TimelineViewModel @Inject constructor(
     val events: StateFlow<List<TimelineEvent>> = repository.getEvents()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 }
+
+@HiltViewModel
+class IdentityViewModel @Inject constructor(
+    private val repository: SyncRepository
+) : ViewModel() {
+
+    val actors: StateFlow<List<com.llmwiki.domain.Actor>> = repository.getActors()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val teams: StateFlow<List<com.llmwiki.domain.Team>> = repository.getTeams()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+}
+
+@HiltViewModel
+class GraphViewModel @Inject constructor(
+    private val api: com.llmwiki.data.LLMWikiApi
+) : ViewModel() {
+
+    private val _graphData = kotlinx.coroutines.flow.MutableStateFlow<com.llmwiki.data.GraphDataResponse?>(null)
+    val graphData: StateFlow<com.llmwiki.data.GraphDataResponse?> = _graphData
+
+    init {
+        fetchGraph()
+    }
+
+    fun fetchGraph() {
+        viewModelScope.launch {
+            try {
+                _graphData.value = api.getGraph()
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+}

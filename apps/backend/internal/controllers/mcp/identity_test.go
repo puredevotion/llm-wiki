@@ -24,10 +24,12 @@ func TestIdentityToolHandler(t *testing.T) {
 
 	t.Run("Create Actor", func(t *testing.T) {
 		input := IdentityInput{
-			Token:            "test-token",
-			Action:           ActionCreateActor,
-			ActorDisplayName: "Bob",
-			ActorKind:        "person",
+			Token:  "test-token",
+			Action: ActionCreateActor,
+			Actor: &domain.Actor{
+				DisplayName: "Alice",
+				Kind:        "person",
+			},
 		}
 		_, output, err := handler(context.Background(), nil, input)
 		if err != nil {
@@ -40,9 +42,11 @@ func TestIdentityToolHandler(t *testing.T) {
 
 	t.Run("Create Team", func(t *testing.T) {
 		input := IdentityInput{
-			Token:    "test-token",
-			Action:   ActionCreateTeam,
-			TeamName: "Engineering",
+			Token:  "test-token",
+			Action: ActionCreateTeam,
+			Team: &domain.Team{
+				Name: "Core",
+			},
 		}
 		_, output, err := handler(context.Background(), nil, input)
 		if err != nil {
@@ -59,7 +63,7 @@ func TestIdentityToolHandler(t *testing.T) {
 			Action:  ActionAddMember,
 			TeamID:  "t1",
 			ActorID: "a1",
-			Role:    "member",
+			Role:    "lead",
 		}
 		_, output, err := handler(context.Background(), nil, input)
 		if err != nil {
@@ -75,7 +79,7 @@ func TestIdentityToolHandler(t *testing.T) {
 			Token:     "test-token",
 			Action:    ActionSetManager,
 			ActorID:   "a1",
-			ManagerID: "a2",
+			TargetID:  "a2", // Manager
 		}
 		_, output, err := handler(context.Background(), nil, input)
 		if err != nil {
@@ -90,7 +94,7 @@ func TestIdentityToolHandler(t *testing.T) {
 		input := IdentityInput{Token: "bad"}
 		_, _, err := handler(context.Background(), nil, input)
 		if err == nil {
-			t.Error("expected error for bad token")
+			t.Error("expected unauthorized error")
 		}
 	})
 
@@ -98,20 +102,7 @@ func TestIdentityToolHandler(t *testing.T) {
 		input := IdentityInput{Token: "test-token", Action: "bad"}
 		_, _, err := handler(context.Background(), nil, input)
 		if err == nil {
-			t.Error("expected error for unsupported action")
+			t.Error("expected unsupported action error")
 		}
 	})
-}
-
-type mockIdentityRepo struct{}
-
-func (m *mockIdentityRepo) SaveTeam(ctx context.Context, team *domain.Team) error { return nil }
-func (m *mockIdentityRepo) SaveOrganization(ctx context.Context, org *domain.Organization) error {
-	return nil
-}
-func (m *mockIdentityRepo) AddTeamMember(ctx context.Context, member *domain.TeamMember) error {
-	return nil
-}
-func (m *mockIdentityRepo) FindTeamByName(ctx context.Context, name string) (*domain.Team, error) {
-	return nil, nil
 }

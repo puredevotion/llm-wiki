@@ -9,6 +9,7 @@ import (
 type ActorRepository interface {
 	FindByName(ctx context.Context, name string) (*domain.Actor, error)
 	Save(ctx context.Context, actor *domain.Actor) error
+	List(ctx context.Context, limit int) ([]*domain.Actor, error)
 }
 
 type SourceRepository interface {
@@ -31,6 +32,7 @@ type IdentityRepository interface {
 	SaveOrganization(ctx context.Context, org *domain.Organization) error
 	AddTeamMember(ctx context.Context, member *domain.TeamMember) error
 	FindTeamByName(ctx context.Context, name string) (*domain.Team, error)
+	ListTeams(ctx context.Context, limit int) ([]*domain.Team, error)
 }
 
 type TimelineRepository interface {

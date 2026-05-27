@@ -5,8 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,7 +34,9 @@ fun MainApp() {
     val navController = rememberNavController()
     val items = listOf(
         Screen.Garden,
-        Screen.Timeline
+        Screen.Timeline,
+        Screen.Relations,
+        Screen.Identity
     )
 
     MaterialTheme {
@@ -84,6 +85,14 @@ fun MainApp() {
                     val viewModel: TimelineViewModel = hiltViewModel()
                     TimelineScreen(viewModel = viewModel)
                 }
+                composable(Screen.Identity.route) {
+                    val viewModel: IdentityViewModel = hiltViewModel()
+                    IdentityScreen(viewModel = viewModel)
+                }
+                composable(Screen.Relations.route) {
+                    val viewModel: GraphViewModel = hiltViewModel()
+                    RelationsScreen(viewModel = viewModel)
+                }
                 composable("capture") {
                     CaptureScreen(
                         onBack = { navController.popBackStack() },
@@ -110,4 +119,6 @@ fun MainApp() {
 sealed class Screen(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     object Garden : Screen("garden", "Garden", Icons.Default.Home)
     object Timeline : Screen("timeline", "Timeline", Icons.Default.DateRange)
+    object Relations : Screen("relations", "Relations", Icons.Default.Share)
+    object Identity : Screen("identity", "Who", Icons.Default.Person)
 }

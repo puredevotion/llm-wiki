@@ -128,3 +128,17 @@ func (s *IdentityService) logOperation(ctx context.Context, kind, entityID, opTy
 	op.AppliedAt = &now
 	return s.ops.Save(ctx, op)
 }
+
+func (s *IdentityService) ListActors(ctx context.Context, limit int) ([]*domain.Actor, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	return s.actors.List(ctx, limit)
+}
+
+func (s *IdentityService) ListTeams(ctx context.Context, limit int) ([]*domain.Team, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	return s.identity.ListTeams(ctx, limit)
+}

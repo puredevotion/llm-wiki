@@ -138,6 +138,54 @@ func (s *Server) getTimeline(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(events)
 }
 
+func (s *Server) getActors(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	limit := 100
+	if lStr := r.URL.Query().Get("limit"); lStr != "" {
+		if l, err := strconv.Atoi(lStr); err == nil {
+			limit = l
+		}
+	}
+
+	actors, err := s.idSvc.ListActors(r.Context(), limit)
+	if err != nil {
+		s.logger.Error("failed to list actors", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(actors)
+}
+
+func (s *Server) getTeams(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	limit := 100
+	if lStr := r.URL.Query().Get("limit"); lStr != "" {
+		if l, err := strconv.Atoi(lStr); err == nil {
+			limit = l
+		}
+	}
+
+	teams, err := s.idSvc.ListTeams(r.Context(), limit)
+	if err != nil {
+		s.logger.Error("failed to list teams", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(teams)
+}
+
 func (s *Server) getZettel(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -201,6 +249,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/graph", s.getGraph)
 	mux.HandleFunc("/api/v1/search", s.getSearch)
 	mux.HandleFunc("/api/v1/timeline", s.getTimeline)
+	mux.HandleFunc("/api/v1/actors", s.getActors)
+	mux.HandleFunc("/api/v1/teams", s.getTeams)
 	mux.HandleFunc("/api/v1/zettels/", s.getZettel)
 	mux.HandleFunc("/api/v1/events/", s.getEvent)
 	mux.HandleFunc("/api//", s.notFound)

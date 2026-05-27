@@ -71,6 +71,9 @@ func (m *mockActorRepo) FindByName(ctx context.Context, name string) (*domain.Ac
 	return nil, nil
 }
 func (m *mockActorRepo) Save(ctx context.Context, actor *domain.Actor) error { return nil }
+func (m *mockActorRepo) List(ctx context.Context, limit int) ([]*domain.Actor, error) {
+	return []*domain.Actor{}, nil
+}
 
 type mockIdentityRepo struct{}
 
@@ -83,6 +86,9 @@ func (m *mockIdentityRepo) AddTeamMember(ctx context.Context, member *domain.Tea
 }
 func (m *mockIdentityRepo) FindTeamByName(ctx context.Context, name string) (*domain.Team, error) {
 	return nil, nil
+}
+func (m *mockIdentityRepo) ListTeams(ctx context.Context, limit int) ([]*domain.Team, error) {
+	return []*domain.Team{}, nil
 }
 
 type mockGraphRepo struct{}

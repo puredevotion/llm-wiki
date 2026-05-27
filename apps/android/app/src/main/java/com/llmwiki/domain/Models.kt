@@ -36,3 +36,19 @@ data class SyncOperation(
     val status: String,
     val created_at: String
 )
+
+data class Actor(
+    val id: String,
+    val kind: String,
+    val display_name: String,
+    val created_at: String,
+    val metadata: Map<String, Any>
+)
+
+data class Team(
+    val id: String,
+    val org_id: String?,
+    val name: String,
+    val created_at: String,
+    val metadata: Map<String, Any>
+)
