@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -11,35 +10,45 @@ import (
 	"llm-wiki/apps/backend/internal/services"
 )
 
-const (
-	defaultSearchLimit = 10
-	maxSearchLimit     = 50
-)
+type SearchInput struct {
+	Query string `json:"query" jsonschema:"the search query, conceptual or keyword"`
+	Limit int    `json:"limit,omitempty" jsonschema:"maximum results, defaults to 10"`
+}
+
+type SearchResult struct {
+	ID        string  `json:"id"`
+	Kind      string  `json:"kind"`
+	Title     string  `json:"title"`
+	Snippet   string  `json:"snippet"`
+	Lifecycle string  `json:"lifecycle"`
+	Score     float64 `json:"score"`
+}
+
+type SearchOutput struct {
+	Results []SearchResult `json:"results"`
+}
 
 func normalizeSearchInput(input SearchInput) (SearchInput, error) {
-	query := strings.TrimSpace(input.Query)
-	if query == "" {
-		return SearchInput{}, errors.New("query is required")
+	input.Query = strings.TrimSpace(input.Query)
+	if input.Query == "" {
+		return input, fmt.Errorf("query is required")
 	}
-
-	limit := input.Limit
-	if limit == 0 {
-		limit = defaultSearchLimit
+	if input.Limit < 0 {
+		return input, fmt.Errorf("limit must be non-negative")
 	}
-	if limit < 0 {
-		return SearchInput{}, errors.New("limit must be positive")
+	if input.Limit == 0 {
+		input.Limit = 10
 	}
-	if limit > maxSearchLimit {
-		return SearchInput{}, fmt.Errorf("limit must be less than or equal to %d", maxSearchLimit)
+	if input.Limit > 50 {
+		return input, fmt.Errorf("limit exceeds maximum of 50")
 	}
-
-	return SearchInput{Query: query, Limit: limit}, nil
+	return input, nil
 }
 
 func registerSearchTool(server *mcpsdk.Server, logger *slog.Logger, searchSvc *services.SearchService) {
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
 		Name:        "kb.search",
-		Description: "Search the knowledge base across zettels, sources, topics, people, teams, and events.",
+		Description: "Conceptual and keyword search over the knowledge base.",
 	}, searchToolHandler(logger, searchSvc))
 }
 
@@ -51,21 +60,25 @@ func searchToolHandler(logger *slog.Logger, searchSvc *services.SearchService) f
 		}
 		logger.InfoContext(ctx, "mcp search requested", "query", normalized.Query, "limit", normalized.Limit)
 
-		zettels, err := searchSvc.Search(ctx, normalized.Query, normalized.Limit)
+		results, err := searchSvc.Search(ctx, normalized.Query, normalized.Limit)
 		if err != nil {
 			return nil, SearchOutput{}, err
 		}
 
-		results := make([]SearchResult, 0, len(zettels))
-		for _, z := range zettels {
-			results = append(results, SearchResult{
-				ID:        z.ID,
+		output := SearchOutput{
+			Results: make([]SearchResult, 0, len(results)),
+		}
+		for _, r := range results {
+			output.Results = append(output.Results, SearchResult{
+				ID:        r.ID,
 				Kind:      "zettel",
-				Title:     z.Title,
-				Lifecycle: z.Lifecycle,
+				Title:     r.Title,
+				Snippet:   r.Snippet,
+				Lifecycle: r.Lifecycle,
+				Score:     r.Score,
 			})
 		}
 
-		return &mcpsdk.CallToolResult{}, SearchOutput{Results: results}, nil
+		return &mcpsdk.CallToolResult{}, output, nil
 	}
 }

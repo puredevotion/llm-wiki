@@ -2,10 +2,12 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"llm-wiki/apps/backend/internal/clients/embeddings"
 	"llm-wiki/apps/backend/internal/domain"
 	"llm-wiki/apps/backend/internal/repositories"
 )
@@ -16,6 +18,9 @@ type IngestionService struct {
 	zettels repositories.ZettelRepository
 	topics  repositories.TopicRepository
 	graph   repositories.GraphRepository
+	ops     repositories.OperationRepository
+	vectors repositories.VectorRepository
+	embeds  embeddings.Client
 }
 
 func NewIngestionService(
@@ -24,6 +29,9 @@ func NewIngestionService(
 	zettels repositories.ZettelRepository,
 	topics repositories.TopicRepository,
 	graph repositories.GraphRepository,
+	ops repositories.OperationRepository,
+	vectors repositories.VectorRepository,
+	embeds embeddings.Client,
 ) *IngestionService {
 	return &IngestionService{
 		actors:  actors,
@@ -31,6 +39,9 @@ func NewIngestionService(
 		zettels: zettels,
 		topics:  topics,
 		graph:   graph,
+		ops:     ops,
+		vectors: vectors,
+		embeds:  embeds,
 	}
 }
 
@@ -85,6 +96,29 @@ func (s *IngestionService) IngestSummary(ctx context.Context, payload domain.Sum
 			if err := s.topics.Save(ctx, topic); err != nil {
 				return "", "", fmt.Errorf("failed to save topic %s: %w", t, err)
 			}
+
+			// Record Sync Operation for Topic
+			tPayload, _ := json.Marshal(topic)
+			tOp := &domain.Operation{
+				ID:            fmt.Sprintf("op_top_%d", time.Now().UnixNano()),
+				EntityKind:    "topic",
+				EntityID:      topic.ID,
+				OperationType: "upsert",
+				Payload:       tPayload,
+				Status:        domain.OperationApplied,
+				CreatedAt:     time.Now(),
+			}
+			now := time.Now()
+			tOp.AppliedAt = &now
+			_ = s.ops.Save(ctx, tOp)
+
+			// Semantic Projection
+			if s.embeds != nil && s.vectors != nil {
+				vec, err := s.embeds.Generate(ctx, topic.Name)
+				if err == nil {
+					_ = s.vectors.Upsert(ctx, topic.ID, "topic", vec, "text-embedding-3-small")
+				}
+			}
 		}
 		topicIDs = append(topicIDs, topic.ID)
 		// Ensure topic node in graph
@@ -134,6 +168,31 @@ func (s *IngestionService) IngestSummary(ctx context.Context, payload domain.Sum
 	if err := s.zettels.Save(ctx, zettel); err != nil {
 		return "", "", fmt.Errorf("failed to save zettel: %w", err)
 	}
+
+	// 5.1 Record Sync Operation for Zettel
+	zPayload, _ := json.Marshal(zettel)
+	zOp := &domain.Operation{
+		ID:            fmt.Sprintf("op_zet_%d", time.Now().UnixNano()),
+		EntityKind:    "zettel",
+		EntityID:      zettel.ID,
+		OperationType: "upsert",
+		Payload:       zPayload,
+		Status:        domain.OperationApplied,
+		CreatedAt:     time.Now(),
+	}
+	now := time.Now()
+	zOp.AppliedAt = &now
+	_ = s.ops.Save(ctx, zOp)
+
+	// Semantic Projection
+	if s.embeds != nil && s.vectors != nil {
+		text := fmt.Sprintf("%s\n\n%s", zettel.Title, zettel.Body)
+		vec, err := s.embeds.Generate(ctx, text)
+		if err == nil {
+			_ = s.vectors.Upsert(ctx, zettel.ID, "zettel", vec, "text-embedding-3-small")
+		}
+	}
+
 	// Zettel node in graph
 	if err := s.graph.UpsertNode(ctx, zettel.ID, "Zettel", map[string]any{"title": zettel.Title, "lifecycle": zettel.Lifecycle}); err != nil {
 		return "", "", fmt.Errorf("failed to upsert zettel node: %w", err)

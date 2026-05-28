@@ -7,51 +7,22 @@ import (
 	"testing"
 	"time"
 
-	"llm-wiki/apps/backend/internal/domain"
 	"llm-wiki/apps/backend/internal/services"
 )
-
-type mockActorRepo struct{}
-
-func (m *mockActorRepo) FindByName(ctx context.Context, name string) (*domain.Actor, error) {
-	if name == "Alice" {
-		return &domain.Actor{ID: "a1", DisplayName: "Alice"}, nil
-	}
-	return nil, nil
-}
-func (m *mockActorRepo) Save(ctx context.Context, actor *domain.Actor) error { return nil }
-
-type mockSourceRepo struct{}
-
-func (m *mockSourceRepo) Save(ctx context.Context, source *domain.Source) error { return nil }
-
-type mockZettelRepo struct{}
-
-func (m *mockZettelRepo) Save(ctx context.Context, zettel *domain.Zettel) error { return nil }
-func (m *mockZettelRepo) SearchZettels(ctx context.Context, query string, limit int) ([]*domain.Zettel, error) {
-	return []*domain.Zettel{}, nil
-}
-
-type mockTopicRepo struct{}
-
-func (m *mockTopicRepo) FindByName(ctx context.Context, name string) (*domain.Topic, error) {
-	return nil, nil
-}
-func (m *mockTopicRepo) Save(ctx context.Context, topic *domain.Topic) error { return nil }
-
-type mockGraphRepo struct{}
-
-func (m *mockGraphRepo) UpsertNode(ctx context.Context, id, label string, properties map[string]any) error {
-	return nil
-}
-func (m *mockGraphRepo) CreateRelationship(ctx context.Context, fromID, fromLabel, toID, toLabel, relType string) error {
-	return nil
-}
 
 func TestIngestToolHandler(t *testing.T) {
 	agentToken := "valid-token"
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ingestion := services.NewIngestionService(&mockActorRepo{}, &mockSourceRepo{}, &mockZettelRepo{}, &mockTopicRepo{}, &mockGraphRepo{})
+	ingestion := services.NewIngestionService(
+		&mockActorRepo{},
+		&mockSourceRepo{},
+		&mockZettelRepo{},
+		&mockTopicRepo{},
+		&mockGraphRepo{},
+		&mockOpRepo{},
+		&mockVectorRepo{},
+		&mockEmbeddingsClient{},
+	)
 	handler := ingestToolHandler(logger, ingestion, agentToken)
 
 	t.Run("Valid Full Ingestion", func(t *testing.T) {

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,45 +14,57 @@ import (
 	"llm-wiki/apps/backend/internal/services"
 )
 
-type mockZettelSearchRepo struct {
+type mockZettelSearchSvcRepo struct {
 	results []*domain.Zettel
 }
 
-func (m *mockZettelSearchRepo) Save(ctx context.Context, zettel *domain.Zettel) error { return nil }
-func (m *mockZettelSearchRepo) SearchZettels(ctx context.Context, query string, limit int) ([]*domain.Zettel, error) {
+func (m *mockZettelSearchSvcRepo) Save(ctx context.Context, zettel *domain.Zettel) error { return nil }
+func (m *mockZettelSearchSvcRepo) FindByID(ctx context.Context, id string) (*domain.Zettel, error) {
+	return nil, nil
+}
+func (m *mockZettelSearchSvcRepo) SearchZettels(ctx context.Context, query string, limit int) ([]*domain.Zettel, error) {
 	if query == "fail" {
-		return nil, http.ErrHandlerTimeout
+		return nil, fmt.Errorf("keyword fail")
 	}
 	return m.results, nil
+}
+
+type mockSearchEmbeddingsClient struct{}
+
+func (m *mockSearchEmbeddingsClient) Generate(ctx context.Context, text string) (domain.Vector, error) {
+	if text == "fail" {
+		return nil, fmt.Errorf("semantic fail")
+	}
+	return domain.Vector{0.1}, nil
+}
+func (m *mockSearchEmbeddingsClient) BatchGenerate(ctx context.Context, texts []string) ([]domain.Vector, error) {
+	return nil, nil
 }
 
 func TestNewHandler(t *testing.T) {
 	cfg := config.Config{AgentToken: "test-token"}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	searchSvc := services.NewSearchService(&mockZettelSearchRepo{})
-	handler := NewHandler(cfg, logger, nil, searchSvc)
+	searchSvc := services.NewSearchService(&mockZettelSearchSvcRepo{}, &mockVectorRepo{}, &mockSearchEmbeddingsClient{})
+	handler := NewHandler(cfg, logger, nil, searchSvc, nil, nil)
 	if handler == nil {
 		t.Fatal("expected non-nil handler")
 	}
 
 	t.Run("Trigger Factory", func(t *testing.T) {
-		// NewStreamableHTTPHandler from MCP SDK might trigger the factory on POST or SSE.
-		// We send a request that looks like an initial SSE or POST request.
 		req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 		res := httptest.NewRecorder()
 		handler.ServeHTTP(res, req)
-		// We don't care about the status, just that the factory was called.
 	})
 }
 
 func TestSearchToolHandler(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	repo := &mockZettelSearchRepo{
+	repo := &mockZettelSearchSvcRepo{
 		results: []*domain.Zettel{
-			{ID: "z1", Title: "Title 1", Lifecycle: "evergreen"},
+			{ID: "z1", Title: "Title 1", Body: "Body 1", Lifecycle: "evergreen"},
 		},
 	}
-	searchSvc := services.NewSearchService(repo)
+	searchSvc := services.NewSearchService(repo, &mockVectorRepo{}, &mockSearchEmbeddingsClient{})
 	handler := searchToolHandler(logger, searchSvc)
 
 	t.Run("Successful Search", func(t *testing.T) {
