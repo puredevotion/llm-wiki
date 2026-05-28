@@ -142,3 +142,10 @@ func (s *IdentityService) ListTeams(ctx context.Context, limit int) ([]*domain.T
 	}
 	return s.identity.ListTeams(ctx, limit)
 }
+
+func (s *IdentityService) ListOrganizations(ctx context.Context, limit int) ([]*domain.Organization, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	return s.identity.ListOrganizations(ctx, limit)
+}

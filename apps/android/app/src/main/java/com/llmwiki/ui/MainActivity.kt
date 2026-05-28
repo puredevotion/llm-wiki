@@ -94,10 +94,11 @@ fun MainApp() {
                     RelationsScreen(viewModel = viewModel)
                 }
                 composable("capture") {
+                    val viewModel: IdentityViewModel = hiltViewModel()
                     CaptureScreen(
                         onBack = { navController.popBackStack() },
                         onSave = { title, body, kind ->
-                            // TODO: Implement actual save logic in ViewModel
+                            viewModel.capture(title, body, kind)
                             navController.popBackStack()
                         }
                     )

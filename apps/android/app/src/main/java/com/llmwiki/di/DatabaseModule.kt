@@ -38,4 +38,7 @@ object DatabaseModule {
 
     @Provides
     fun provideTeamDao(db: LLMWikiDatabase): TeamDao = db.teamDao()
+
+    @Provides
+    fun provideOrganizationDao(db: LLMWikiDatabase): OrganizationDao = db.organizationDao()
 }

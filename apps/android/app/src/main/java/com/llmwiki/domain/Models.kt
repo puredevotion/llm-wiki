@@ -52,3 +52,10 @@ data class Team(
     val created_at: String,
     val metadata: Map<String, Any>
 )
+
+data class Organization(
+    val id: String,
+    val name: String,
+    val created_at: String,
+    val metadata: Map<String, Any>
+)

@@ -18,16 +18,16 @@ import com.llmwiki.domain.Actor
 import com.llmwiki.domain.Team
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable
 fun IdentityScreen(
     viewModel: IdentityViewModel
 ) {
     val actors by viewModel.actors.collectAsState()
     val teams by viewModel.teams.collectAsState()
+    val organizations by viewModel.organizations.collectAsState()
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Identity") })
+            TopAppBar(title = { Text("Who") })
         }
     ) { padding ->
         LazyColumn(
@@ -38,8 +38,18 @@ fun IdentityScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
+                Text(text = "Organizations", style = MaterialTheme.typography.titleLarge)
+            }
+            items(organizations) { org ->
+                IdentityItem(title = org.name, subtitle = "Organization", icon = Icons.Default.Star)
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(text = "Teams", style = MaterialTheme.typography.titleLarge)
             }
+...
+
             items(teams) { team ->
                 IdentityItem(title = team.name, subtitle = "Team", icon = Icons.Default.Star)
             }

@@ -186,6 +186,30 @@ func (s *Server) getTeams(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(teams)
 }
 
+func (s *Server) getOrganizations(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	limit := 100
+	if lStr := r.URL.Query().Get("limit"); lStr != "" {
+		if l, err := strconv.Atoi(lStr); err == nil {
+			limit = l
+		}
+	}
+
+	orgs, err := s.idSvc.ListOrganizations(r.Context(), limit)
+	if err != nil {
+		s.logger.Error("failed to list organizations", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(orgs)
+}
+
 func (s *Server) getZettel(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -251,6 +275,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/timeline", s.getTimeline)
 	mux.HandleFunc("/api/v1/actors", s.getActors)
 	mux.HandleFunc("/api/v1/teams", s.getTeams)
+	mux.HandleFunc("/api/v1/organizations", s.getOrganizations)
 	mux.HandleFunc("/api/v1/zettels/", s.getZettel)
 	mux.HandleFunc("/api/v1/events/", s.getEvent)
 	mux.HandleFunc("/api//", s.notFound)

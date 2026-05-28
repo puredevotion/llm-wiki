@@ -14,9 +14,12 @@ func TestSyncService(t *testing.T) {
 	zettelRepo := &mockZettelRepo{zettels: make(map[string]*domain.Zettel)}
 	topicRepo := &mockTopicRepo{topics: make(map[string]*domain.Topic)}
 	vRepo := &mockVectorRepo{}
+	tRepo := &mockTimelineRepo{events: make(map[string]*domain.Event)}
+	aRepo := &mockActorRepo{actors: make(map[string]*domain.Actor)}
+	iRepo := &mockIdentityRepo{teams: make(map[string]*domain.Team)}
 	embeds := &mockEmbeddingsClient{}
 
-	svc := NewSyncService(opRepo, zettelRepo, topicRepo, vRepo, embeds)
+	svc := NewSyncService(opRepo, zettelRepo, topicRepo, vRepo, tRepo, aRepo, iRepo, embeds)
 	ctx := context.Background()
 
 	t.Run("Apply Zettel Upsert", func(t *testing.T) {
@@ -62,6 +65,63 @@ func TestSyncService(t *testing.T) {
 		}
 	})
 
+	t.Run("Apply Event Upsert", func(t *testing.T) {
+		payload, _ := json.Marshal(domain.Event{Title: "E"})
+		batch := domain.SyncBatch{
+			Operations: []domain.Operation{
+				{
+					ID:            "ope1",
+					EntityKind:    "event",
+					EntityID:      "e1",
+					OperationType: "upsert",
+					Payload:       payload,
+				},
+			},
+		}
+		results, _ := svc.ProcessBatch(ctx, batch)
+		if results[0].Status != domain.OperationApplied {
+			t.Error("expected applied for event")
+		}
+	})
+
+	t.Run("Apply Actor Upsert", func(t *testing.T) {
+		payload, _ := json.Marshal(domain.Actor{DisplayName: "A"})
+		batch := domain.SyncBatch{
+			Operations: []domain.Operation{
+				{
+					ID:            "opa1",
+					EntityKind:    "actor",
+					EntityID:      "a1",
+					OperationType: "upsert",
+					Payload:       payload,
+				},
+			},
+		}
+		results, _ := svc.ProcessBatch(ctx, batch)
+		if results[0].Status != domain.OperationApplied {
+			t.Error("expected applied for actor")
+		}
+	})
+
+	t.Run("Apply Team Upsert", func(t *testing.T) {
+		payload, _ := json.Marshal(domain.Team{Name: "Team"})
+		batch := domain.SyncBatch{
+			Operations: []domain.Operation{
+				{
+					ID:            "opteam1",
+					EntityKind:    "team",
+					EntityID:      "team1",
+					OperationType: "upsert",
+					Payload:       payload,
+				},
+			},
+		}
+		results, _ := svc.ProcessBatch(ctx, batch)
+		if results[0].Status != domain.OperationApplied {
+			t.Error("expected applied for team")
+		}
+	})
+
 	t.Run("Apply Zettel Marshal Fail", func(t *testing.T) {
 		batch := domain.SyncBatch{
 			Operations: []domain.Operation{
@@ -94,8 +154,23 @@ func TestSyncService(t *testing.T) {
 		}
 	})
 
+	t.Run("Existing Operation Idempotency", func(t *testing.T) {
+		op := &domain.Operation{ID: "existing1", Status: domain.OperationApplied}
+		opRepo.Save(ctx, op)
+		
+		batch := domain.SyncBatch{
+			Operations: []domain.Operation{{ID: "existing1"}},
+		}
+		results, err := svc.ProcessBatch(ctx, batch)
+		if err != nil {
+			t.Fatalf("ProcessBatch failed: %v", err)
+		}
+		if len(results) != 1 || results[0].ID != "existing1" {
+			t.Error("expected existing op to be returned")
+		}
+	})
+
 	t.Run("Fetch Changes", func(t *testing.T) {
-		// Apply an op first to have something to fetch
 		payload, _ := json.Marshal(domain.Zettel{Title: "Z"})
 		svc.ProcessBatch(ctx, domain.SyncBatch{Operations: []domain.Operation{{ID: "f1", EntityKind: "zettel", Payload: payload}}})
 

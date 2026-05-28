@@ -33,6 +33,7 @@ type IdentityRepository interface {
 	AddTeamMember(ctx context.Context, member *domain.TeamMember) error
 	FindTeamByName(ctx context.Context, name string) (*domain.Team, error)
 	ListTeams(ctx context.Context, limit int) ([]*domain.Team, error)
+	ListOrganizations(ctx context.Context, limit int) ([]*domain.Organization, error)
 }
 
 type TimelineRepository interface {

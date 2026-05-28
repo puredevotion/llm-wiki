@@ -81,7 +81,7 @@ func run() error {
 		embeds,
 	)
 	searchSvc := services.NewSearchService(sqlStore.Zettels(), sqlStore.Vectors(), embeds)
-	syncSvc := services.NewSyncService(sqlStore.Operations(), sqlStore.Zettels(), sqlStore.Topics(), sqlStore.Vectors(), embeds)
+	syncSvc := services.NewSyncService(sqlStore.Operations(), sqlStore.Zettels(), sqlStore.Topics(), sqlStore.Vectors(), sqlStore.Timeline(), sqlStore.Actors(), sqlStore.Identity(), embeds)
 	idSvc := services.NewIdentityService(sqlStore.Actors(), sqlStore.Identity(), graphStore.Graph(), sqlStore.Operations())
 	timeSvc := services.NewTimelineService(sqlStore.Timeline(), graphStore.Graph(), sqlStore.Operations())
 	graphSvc := services.NewGraphService(graphStore.Graph())

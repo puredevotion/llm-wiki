@@ -49,6 +49,15 @@ class IdentityViewModel @Inject constructor(
 
     val teams: StateFlow<List<com.llmwiki.domain.Team>> = repository.getTeams()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val organizations: StateFlow<List<com.llmwiki.domain.Organization>> = repository.getOrganizations()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun capture(title: String, body: String, kind: String) {
+        viewModelScope.launch {
+            repository.capture(title, body, kind)
+        }
+    }
 }
 
 @HiltViewModel

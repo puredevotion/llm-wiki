@@ -252,9 +252,31 @@ func (r *identityRepo) AddTeamMember(ctx context.Context, m *domain.TeamMember) 
 		m.TeamID, m.ActorID, m.Role, m.CreatedAt.Format(time.RFC3339),
 	)
 	return err
+func (r *identityRepo) ListTeams(ctx context.Context, limit int) ([]*domain.Team, error) {
+...
 }
 
-func (r *identityRepo) ListTeams(ctx context.Context, limit int) ([]*domain.Team, error) {
+func (r *identityRepo) ListOrganizations(ctx context.Context, limit int) ([]*domain.Organization, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, name, metadata_json, created_at FROM organizations ORDER BY name ASC LIMIT ?", limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list organizations: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*domain.Organization
+	for rows.Next() {
+		var o domain.Organization
+		var metadata, createdAt string
+		if err := rows.Scan(&o.ID, &o.Name, &metadata, &createdAt); err != nil {
+			return nil, fmt.Errorf("failed to scan organization: %w", err)
+		}
+		json.Unmarshal([]byte(metadata), &o.Metadata)
+		o.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+		results = append(results, &o)
+	}
+	return results, nil
+}
+
 	rows, err := r.db.QueryContext(ctx, "SELECT id, org_id, name, metadata_json, created_at FROM teams ORDER BY name ASC LIMIT ?", limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list teams: %w", err)
