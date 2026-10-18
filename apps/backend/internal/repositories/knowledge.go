@@ -31,3 +31,9 @@ type GraphRepository interface {
 	// UpsertNode ensures a node exists with the given ID and label.
 	UpsertNode(ctx context.Context, id, label string, properties map[string]any) error
 }
+
+type OperationRepository interface {
+	Save(ctx context.Context, op *domain.Operation) error
+	FindByID(ctx context.Context, id string) (*domain.Operation, error)
+	FetchChanges(ctx context.Context, cursor string, limit int) ([]*domain.Operation, error)
+}

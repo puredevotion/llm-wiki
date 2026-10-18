@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ type IngestionService struct {
 	zettels repositories.ZettelRepository
 	topics  repositories.TopicRepository
 	graph   repositories.GraphRepository
+	ops     repositories.OperationRepository
 }
 
 func NewIngestionService(
@@ -24,6 +26,7 @@ func NewIngestionService(
 	zettels repositories.ZettelRepository,
 	topics repositories.TopicRepository,
 	graph repositories.GraphRepository,
+	ops repositories.OperationRepository,
 ) *IngestionService {
 	return &IngestionService{
 		actors:  actors,
@@ -31,6 +34,7 @@ func NewIngestionService(
 		zettels: zettels,
 		topics:  topics,
 		graph:   graph,
+		ops:     ops,
 	}
 }
 
@@ -85,6 +89,21 @@ func (s *IngestionService) IngestSummary(ctx context.Context, payload domain.Sum
 			if err := s.topics.Save(ctx, topic); err != nil {
 				return "", "", fmt.Errorf("failed to save topic %s: %w", t, err)
 			}
+
+			// Record Sync Operation for Topic
+			tPayload, _ := json.Marshal(topic)
+			tOp := &domain.Operation{
+				ID:            fmt.Sprintf("op_top_%d", time.Now().UnixNano()),
+				EntityKind:    "topic",
+				EntityID:      topic.ID,
+				OperationType: "upsert",
+				Payload:       tPayload,
+				Status:        domain.OperationApplied,
+				CreatedAt:     time.Now(),
+			}
+			now := time.Now()
+			tOp.AppliedAt = &now
+			_ = s.ops.Save(ctx, tOp)
 		}
 		topicIDs = append(topicIDs, topic.ID)
 		// Ensure topic node in graph
@@ -134,6 +153,22 @@ func (s *IngestionService) IngestSummary(ctx context.Context, payload domain.Sum
 	if err := s.zettels.Save(ctx, zettel); err != nil {
 		return "", "", fmt.Errorf("failed to save zettel: %w", err)
 	}
+
+	// 5.1 Record Sync Operation for Zettel
+	zPayload, _ := json.Marshal(zettel)
+	zOp := &domain.Operation{
+		ID:            fmt.Sprintf("op_zet_%d", time.Now().UnixNano()),
+		EntityKind:    "zettel",
+		EntityID:      zettel.ID,
+		OperationType: "upsert",
+		Payload:       zPayload,
+		Status:        domain.OperationApplied,
+		CreatedAt:     time.Now(),
+	}
+	now := time.Now()
+	zOp.AppliedAt = &now
+	_ = s.ops.Save(ctx, zOp)
+
 	// Zettel node in graph
 	if err := s.graph.UpsertNode(ctx, zettel.ID, "Zettel", map[string]any{"title": zettel.Title, "lifecycle": zettel.Lifecycle}); err != nil {
 		return "", "", fmt.Errorf("failed to upsert zettel node: %w", err)

@@ -17,6 +17,10 @@ func TestToolRegistration(t *testing.T) {
 		registerIngestTool(server, logger, nil, "token")
 	})
 
+	t.Run("Register Search", func(t *testing.T) {
+		registerSearchTool(server, logger, nil)
+	})
+
 	t.Run("Server Factory", func(t *testing.T) {
 		factory := mcpServerFactory(config.Config{AgentToken: "t"}, logger, nil, nil)
 		server := factory(nil)

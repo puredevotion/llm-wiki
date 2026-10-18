@@ -48,10 +48,20 @@ func (m *mockGraphRepo) CreateRelationship(ctx context.Context, fromID, fromLabe
 	return nil
 }
 
+type mockOpRepo struct{}
+
+func (m *mockOpRepo) Save(ctx context.Context, op *domain.Operation) error { return nil }
+func (m *mockOpRepo) FindByID(ctx context.Context, id string) (*domain.Operation, error) {
+	return nil, nil
+}
+func (m *mockOpRepo) FetchChanges(ctx context.Context, cursor string, limit int) ([]*domain.Operation, error) {
+	return nil, nil
+}
+
 func TestIngestToolHandler(t *testing.T) {
 	agentToken := "valid-token"
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ingestion := services.NewIngestionService(&mockActorRepo{}, &mockSourceRepo{}, &mockZettelRepo{}, &mockTopicRepo{}, &mockGraphRepo{})
+	ingestion := services.NewIngestionService(&mockActorRepo{}, &mockSourceRepo{}, &mockZettelRepo{}, &mockTopicRepo{}, &mockGraphRepo{}, &mockOpRepo{})
 	handler := ingestToolHandler(logger, ingestion, agentToken)
 
 	t.Run("Valid Full Ingestion", func(t *testing.T) {

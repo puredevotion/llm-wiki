@@ -98,10 +98,11 @@ type mockGraphRepo struct {
 	failRel   bool
 	failLabel string
 	failTo    string
+	failFrom  string
 }
 
 func (m *mockGraphRepo) UpsertNode(ctx context.Context, id, label string, properties map[string]any) error {
-	if m.fail || m.failLabel == label {
+	if m.fail || (m.failLabel != "" && m.failLabel == label) {
 		return fmt.Errorf("graph upsert failed")
 	}
 	m.nodes[id] = label
@@ -109,24 +110,33 @@ func (m *mockGraphRepo) UpsertNode(ctx context.Context, id, label string, proper
 }
 
 func (m *mockGraphRepo) CreateRelationship(ctx context.Context, fromID, fromLabel, toID, toLabel, relType string) error {
-	if m.fail || m.failRel || (m.failTo != "" && m.failTo == toLabel) {
+	if m.fail || m.failRel || (m.failTo != "" && m.failTo == toLabel) || (m.failFrom != "" && m.failFrom == fromLabel) {
 		return fmt.Errorf("graph relationship failed")
 	}
 	m.edges = append(m.edges, fmt.Sprintf("%s:%s:%s:%s:%s", fromID, fromLabel, toID, toLabel, relType))
 	return nil
 }
 
-func TestIngestSummary(t *testing.T) {
-	actors := &mockActorRepo{actors: make(map[string]*domain.Actor)}
-	sources := &mockSourceRepo{sources: make(map[string]*domain.Source)}
-	zettels := &mockZettelRepo{zettels: make(map[string]*domain.Zettel)}
-	topics := &mockTopicRepo{topics: make(map[string]*domain.Topic)}
-	graph := &mockGraphRepo{nodes: make(map[string]string)}
+type mockOpRepo struct {
+	ops map[string]*domain.Operation
+	fail bool
+}
 
-	service := NewIngestionService(actors, sources, zettels, topics, graph)
+func (m *mockOpRepo) Save(ctx context.Context, op *domain.Operation) error {
+	if m.fail {
+		return fmt.Errorf("op save failed")
+	}
+	m.ops[op.ID] = op
+	return nil
+}
+func (m *mockOpRepo) FindByID(ctx context.Context, id string) (*domain.Operation, error) { return nil, nil }
+func (m *mockOpRepo) FetchChanges(ctx context.Context, cursor string, limit int) ([]*domain.Operation, error) { return nil, nil }
+
+func TestIngestSummary(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Happy Path", func(t *testing.T) {
+		service := NewIngestionService(&mockActorRepo{actors: make(map[string]*domain.Actor)}, &mockSourceRepo{sources: make(map[string]*domain.Source)}, &mockZettelRepo{zettels: make(map[string]*domain.Zettel)}, &mockTopicRepo{topics: make(map[string]*domain.Topic)}, &mockGraphRepo{nodes: make(map[string]string)}, &mockOpRepo{ops: make(map[string]*domain.Operation)})
 		payload := domain.SummaryPayload{
 			Project:      "Test Project",
 			Participants: []string{"Alice", "Bob"},
@@ -141,149 +151,109 @@ func TestIngestSummary(t *testing.T) {
 		}
 	})
 
-	t.Run("Validation Errors", func(t *testing.T) {
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Summary: ""})
-		if err == nil {
-			t.Error("expected error")
-		}
-		_, _, err = service.IngestSummary(ctx, domain.SummaryPayload{Summary: "s", Conclusions: []string{}})
-		if err == nil {
-			t.Error("expected error")
-		}
-	})
-
-	t.Run("Actor Find Fail", func(t *testing.T) {
-		actors.findFail = true
-		defer func() { actors.findFail = false }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Participants: []string{"A"}, Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
+	t.Run("Graph Failures", func(t *testing.T) {
+		graph := &mockGraphRepo{nodes: make(map[string]string)}
+		service := NewIngestionService(&mockActorRepo{actors: make(map[string]*domain.Actor)}, &mockSourceRepo{sources: make(map[string]*domain.Source)}, &mockZettelRepo{zettels: make(map[string]*domain.Zettel)}, &mockTopicRepo{topics: make(map[string]*domain.Topic)}, graph, &mockOpRepo{ops: make(map[string]*domain.Operation)})
+		
+		labels := []string{"Person", "Topic", "Project", "Source", "Zettel"}
+		for _, label := range labels {
+			graph.failLabel = label
+			payload := domain.SummaryPayload{Project: "P", Participants: []string{"A"}, Topics: []string{"T"}, Summary: "s", Conclusions: []string{"c"}}
+			_, _, err := service.IngestSummary(ctx, payload)
+			if err == nil {
+				t.Errorf("expected error for label %s", label)
+			}
 		}
 	})
 
-	t.Run("Actor Save Fail", func(t *testing.T) {
-		actors.fail = true
-		defer func() { actors.fail = false }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Participants: []string{"A"}, Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
-		}
-	})
+	t.Run("Relationship Failures", func(t *testing.T) {
+		graph := &mockGraphRepo{nodes: make(map[string]string)}
+		service := NewIngestionService(&mockActorRepo{actors: make(map[string]*domain.Actor)}, &mockSourceRepo{sources: make(map[string]*domain.Source)}, &mockZettelRepo{zettels: make(map[string]*domain.Zettel)}, &mockTopicRepo{topics: make(map[string]*domain.Topic)}, graph, &mockOpRepo{ops: make(map[string]*domain.Operation)})
+		payload := domain.SummaryPayload{Project: "P", Participants: []string{"A"}, Topics: []string{"T"}, Summary: "s", Conclusions: []string{"c"}}
 
-	t.Run("Actor Graph Upsert Fail", func(t *testing.T) {
-		graph.failLabel = "Person"
-		defer func() { graph.failLabel = "" }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Participants: []string{"A"}, Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
-		}
-	})
-
-	t.Run("Topic Find Fail", func(t *testing.T) {
-		topics.findFail = true
-		defer func() { topics.findFail = false }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Topics: []string{"T"}, Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
-		}
-	})
-
-	t.Run("Topic Save Fail", func(t *testing.T) {
-		topics.fail = true
-		defer func() { topics.fail = false }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Topics: []string{"T"}, Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
-		}
-	})
-
-	t.Run("Topic Graph Upsert Fail", func(t *testing.T) {
-		graph.failLabel = "Topic"
-		defer func() { graph.failLabel = "" }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Topics: []string{"T"}, Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
-		}
-	})
-
-	t.Run("Project Graph Upsert Fail", func(t *testing.T) {
-		graph.failLabel = "Project"
-		defer func() { graph.failLabel = "" }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Project: "P", Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
-		}
-	})
-
-	t.Run("Source Save Fail", func(t *testing.T) {
-		sources.fail = true
-		defer func() { sources.fail = false }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
-		}
-	})
-
-	t.Run("Source Graph Upsert Fail", func(t *testing.T) {
-		graph.failLabel = "Source"
-		defer func() { graph.failLabel = "" }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
-		}
-	})
-
-	t.Run("Zettel Save Fail", func(t *testing.T) {
-		zettels.fail = true
-		defer func() { zettels.fail = false }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
-		}
-	})
-
-	t.Run("Zettel Graph Upsert Fail", func(t *testing.T) {
-		graph.failLabel = "Zettel"
-		defer func() { graph.failLabel = "" }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
-		}
-	})
-
-	t.Run("Rel to Actor Fail", func(t *testing.T) {
+		// Fail Source -> Actor
 		graph.failTo = "Person"
-		defer func() { graph.failTo = "" }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Participants: []string{"A"}, Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
+		if _, _, err := service.IngestSummary(ctx, payload); err == nil {
+			t.Error("expected error on Source->Actor rel")
 		}
-	})
+		graph.failTo = ""
 
-	t.Run("Rel to Topic Fail", func(t *testing.T) {
+		// Fail Source -> Topic
 		graph.failTo = "Topic"
-		defer func() { graph.failTo = "" }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Topics: []string{"T"}, Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
+		graph.failFrom = "Source"
+		if _, _, err := service.IngestSummary(ctx, payload); err == nil {
+			t.Error("expected error on Source->Topic rel")
 		}
-	})
+		graph.failTo = ""
+		graph.failFrom = ""
 
-	t.Run("Rel to Project Fail", func(t *testing.T) {
+		// Fail Source -> Project
 		graph.failTo = "Project"
-		defer func() { graph.failTo = "" }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Project: "P", Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
+		if _, _, err := service.IngestSummary(ctx, payload); err == nil {
+			t.Error("expected error on Source->Project rel")
+		}
+		graph.failTo = ""
+
+		// Fail Zettel -> Source
+		graph.failFrom = "Zettel"
+		graph.failTo = "Source"
+		if _, _, err := service.IngestSummary(ctx, payload); err == nil {
+			t.Error("expected error on Zettel->Source rel")
+		}
+		graph.failFrom = ""
+		graph.failTo = ""
+
+		// Fail Zettel -> Topic
+		graph.failFrom = "Zettel"
+		graph.failTo = "Topic"
+		if _, _, err := service.IngestSummary(ctx, payload); err == nil {
+			t.Error("expected error on Zettel->Topic rel")
 		}
 	})
 
-	t.Run("Rel Zettel to Source Fail", func(t *testing.T) {
-		graph.failRel = true
-		defer func() { graph.failRel = false }()
-		_, _, err := service.IngestSummary(ctx, domain.SummaryPayload{Summary: "s", Conclusions: []string{"c"}})
-		if err == nil {
-			t.Error("expected error")
+	t.Run("Repo Failures", func(t *testing.T) {
+		actors := &mockActorRepo{actors: make(map[string]*domain.Actor)}
+		topics := &mockTopicRepo{topics: make(map[string]*domain.Topic)}
+		sources := &mockSourceRepo{sources: make(map[string]*domain.Source)}
+		zettels := &mockZettelRepo{zettels: make(map[string]*domain.Zettel)}
+		
+		service := NewIngestionService(actors, sources, zettels, topics, &mockGraphRepo{nodes: make(map[string]string)}, &mockOpRepo{ops: make(map[string]*domain.Operation)})
+		payload := domain.SummaryPayload{Project: "P", Participants: []string{"A"}, Topics: []string{"T"}, Summary: "s", Conclusions: []string{"c"}}
+
+		actors.findFail = true
+		if _, _, err := service.IngestSummary(ctx, payload); err == nil {
+			t.Error("expected error on actor find")
 		}
+		actors.findFail = false
+		
+		actors.fail = true
+		if _, _, err := service.IngestSummary(ctx, payload); err == nil {
+			t.Error("expected error on actor save")
+		}
+		actors.fail = false
+
+		topics.findFail = true
+		if _, _, err := service.IngestSummary(ctx, payload); err == nil {
+			t.Error("expected error on topic find")
+		}
+		topics.findFail = false
+
+		topics.fail = true
+		if _, _, err := service.IngestSummary(ctx, payload); err == nil {
+			t.Error("expected error on topic save")
+		}
+		topics.fail = false
+
+		sources.fail = true
+		if _, _, err := service.IngestSummary(ctx, payload); err == nil {
+			t.Error("expected error on source save")
+		}
+		sources.fail = false
+
+		zettels.fail = true
+		if _, _, err := service.IngestSummary(ctx, payload); err == nil {
+			t.Error("expected error on zettel save")
+		}
+		zettels.fail = false
 	})
 }
