@@ -27,15 +27,16 @@ type SearchResult struct {
 	Score     float64 `json:"score" jsonschema:"relevance score from 0 to 1"`
 }
 
-func NewHandler(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService, searchSvc *services.SearchService) http.Handler {
-	return mcpsdk.NewStreamableHTTPHandler(mcpServerFactory(cfg, logger, ingestion, searchSvc), nil)
+func NewHandler(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService, searchSvc *services.SearchService, idSvc *services.IdentityService) http.Handler {
+	return mcpsdk.NewStreamableHTTPHandler(mcpServerFactory(cfg, logger, ingestion, searchSvc, idSvc), nil)
 }
 
-func mcpServerFactory(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService, searchSvc *services.SearchService) func(r *http.Request) *mcpsdk.Server {
+func mcpServerFactory(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService, searchSvc *services.SearchService, idSvc *services.IdentityService) func(r *http.Request) *mcpsdk.Server {
 	return func(r *http.Request) *mcpsdk.Server {
 		server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "llm-wiki", Version: "0.1.0"}, nil)
 		registerSearchTool(server, logger, searchSvc)
 		registerIngestTool(server, logger, ingestion, cfg.AgentToken)
+		registerIdentityTools(server, logger, idSvc, cfg.AgentToken)
 		return server
 	}
 }

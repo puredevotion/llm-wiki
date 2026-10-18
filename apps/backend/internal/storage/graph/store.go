@@ -37,6 +37,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 	// Initial schema
 	schemaQueries := []string{
 		"CREATE NODE TABLE Person(id STRING, name STRING, PRIMARY KEY (id))",
+		"CREATE NODE TABLE Team(id STRING, name STRING, PRIMARY KEY (id))",
+		"CREATE NODE TABLE Organization(id STRING, name STRING, PRIMARY KEY (id))",
 		"CREATE NODE TABLE Topic(id STRING, name STRING, PRIMARY KEY (id))",
 		"CREATE NODE TABLE Project(id STRING, name STRING, PRIMARY KEY (id))",
 		"CREATE NODE TABLE Source(id STRING, title STRING, kind STRING, PRIMARY KEY (id))",
@@ -44,6 +46,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 		"CREATE REL TABLE AUTHORED_BY(FROM Source TO Person)",
 		"CREATE REL TABLE RELATED_TO(FROM Source TO Topic, FROM Source TO Project, FROM Zettel TO Topic)",
 		"CREATE REL TABLE DERIVED_FROM(FROM Zettel TO Source)",
+		"CREATE REL TABLE MEMBER_OF(FROM Person TO Team)",
+		"CREATE REL TABLE PART_OF(FROM Team TO Organization)",
+		"CREATE REL TABLE REPORTS_TO(FROM Person TO Person)",
 	}
 
 	for _, q := range schemaQueries {

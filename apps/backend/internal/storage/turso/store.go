@@ -48,6 +48,7 @@ func (s *Store) Sources() repositories.SourceRepository { return &sourceRepo{s} 
 func (s *Store) Zettels() repositories.ZettelRepository { return &zettelRepo{s} }
 func (s *Store) Topics() repositories.TopicRepository   { return &topicRepo{s} }
 func (s *Store) Operations() repositories.OperationRepository { return &operationRepo{s} }
+func (s *Store) Identity() repositories.IdentityRepository { return &identityRepo{s} }
 
 type actorRepo struct{ *Store }
 
@@ -177,6 +178,60 @@ func (r *topicRepo) Save(ctx context.Context, t *domain.Topic) error {
 		t.ID, parentID, t.Name, t.CreatedAt.Format(time.RFC3339), time.Now().Format(time.RFC3339),
 	)
 	return err
+}
+
+type identityRepo struct{ *Store }
+
+func (r *identityRepo) SaveTeam(ctx context.Context, t *domain.Team) error {
+	metadata, _ := json.Marshal(t.Metadata)
+	var orgID sql.NullString
+	if t.OrgID != "" {
+		orgID.String = t.OrgID
+		orgID.Valid = true
+	}
+	_, err := r.db.ExecContext(ctx,
+		"INSERT INTO teams (id, org_id, name, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, metadata_json=excluded.metadata_json, updated_at=excluded.updated_at",
+		t.ID, orgID, t.Name, string(metadata), t.CreatedAt.Format(time.RFC3339), time.Now().Format(time.RFC3339),
+	)
+	return err
+}
+
+func (r *identityRepo) SaveOrganization(ctx context.Context, o *domain.Organization) error {
+	metadata, _ := json.Marshal(o.Metadata)
+	_, err := r.db.ExecContext(ctx,
+		"INSERT INTO organizations (id, name, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, metadata_json=excluded.metadata_json, updated_at=excluded.updated_at",
+		o.ID, o.Name, string(metadata), o.CreatedAt.Format(time.RFC3339), time.Now().Format(time.RFC3339),
+	)
+	return err
+}
+
+func (r *identityRepo) AddTeamMember(ctx context.Context, m *domain.TeamMember) error {
+	_, err := r.db.ExecContext(ctx,
+		"INSERT INTO team_members (team_id, actor_id, role, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(team_id, actor_id) DO UPDATE SET role=excluded.role",
+		m.TeamID, m.ActorID, m.Role, m.CreatedAt.Format(time.RFC3339),
+	)
+	return err
+}
+
+func (r *identityRepo) FindTeamByName(ctx context.Context, name string) (*domain.Team, error) {
+	row := r.db.QueryRowContext(ctx, "SELECT id, org_id, name, metadata_json, created_at FROM teams WHERE name = ?", name)
+	var t domain.Team
+	var orgID sql.NullString
+	var metadata string
+	var createdAt string
+	err := row.Scan(&t.ID, &orgID, &t.Name, &metadata, &createdAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if orgID.Valid {
+		t.OrgID = orgID.String
+	}
+	json.Unmarshal([]byte(metadata), &t.Metadata)
+	t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+	return &t, nil
 }
 
 type operationRepo struct{ *Store }
