@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -43,12 +45,13 @@ func (s *Store) Migrate(ctx context.Context, schema string) error {
 	return err
 }
 
-func (s *Store) Actors() repositories.ActorRepository   { return &actorRepo{s} }
-func (s *Store) Sources() repositories.SourceRepository { return &sourceRepo{s} }
-func (s *Store) Zettels() repositories.ZettelRepository { return &zettelRepo{s} }
-func (s *Store) Topics() repositories.TopicRepository   { return &topicRepo{s} }
+func (s *Store) Actors() repositories.ActorRepository         { return &actorRepo{s} }
+func (s *Store) Sources() repositories.SourceRepository       { return &sourceRepo{s} }
+func (s *Store) Zettels() repositories.ZettelRepository       { return &zettelRepo{s} }
+func (s *Store) Topics() repositories.TopicRepository         { return &topicRepo{s} }
 func (s *Store) Operations() repositories.OperationRepository { return &operationRepo{s} }
-func (s *Store) Identity() repositories.IdentityRepository { return &identityRepo{s} }
+func (s *Store) Identity() repositories.IdentityRepository     { return &identityRepo{s} }
+func (s *Store) Vectors() repositories.VectorRepository       { return &vectorRepo{s} }
 
 type actorRepo struct{ *Store }
 
@@ -119,6 +122,22 @@ func (r *zettelRepo) Save(ctx context.Context, z *domain.Zettel) error {
 		z.ID, z.Title, z.Body, z.Lifecycle, z.Status, z.CreatedBy, vFrom, vTo, rAfter, z.CreatedAt.Format(time.RFC3339), z.UpdatedAt.Format(time.RFC3339),
 	)
 	return err
+}
+
+func (r *zettelRepo) FindByID(ctx context.Context, id string) (*domain.Zettel, error) {
+	row := r.db.QueryRowContext(ctx, "SELECT id, title, body, lifecycle, status, created_by, created_at, updated_at FROM zettels WHERE id = ?", id)
+	var z domain.Zettel
+	var createdAt, updatedAt string
+	err := row.Scan(&z.ID, &z.Title, &z.Body, &z.Lifecycle, &z.Status, &z.CreatedBy, &createdAt, &updatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	z.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+	z.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+	return &z, nil
 }
 
 func (r *zettelRepo) SearchZettels(ctx context.Context, query string, limit int) ([]*domain.Zettel, error) {
@@ -306,4 +325,80 @@ func (r *operationRepo) FetchChanges(ctx context.Context, cursor string, limit i
 		results = append(results, &op)
 	}
 	return results, nil
+}
+
+type vectorRepo struct{ *Store }
+
+func (r *vectorRepo) Upsert(ctx context.Context, id, kind string, vec domain.Vector, model string) error {
+	vecJSON, err := json.Marshal(vec)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.ExecContext(ctx,
+		"INSERT INTO embeddings (entity_id, entity_kind, vector_json, model_name, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(entity_id, entity_kind) DO UPDATE SET vector_json=excluded.vector_json, model_name=excluded.model_name",
+		id, kind, string(vecJSON), model, time.Now().Format(time.RFC3339),
+	)
+	return err
+}
+
+func (r *vectorRepo) Search(ctx context.Context, kind string, queryVec domain.Vector, limit int) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT entity_id, vector_json FROM embeddings WHERE entity_kind = ?", kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type score struct {
+		id    string
+		value float32
+	}
+	var scores []score
+
+	for rows.Next() {
+		var id, vecJSON string
+		if err := rows.Scan(&id, &vecJSON); err != nil {
+			return nil, err
+		}
+		var vec domain.Vector
+		if err := json.Unmarshal([]byte(vecJSON), &vec); err != nil {
+			continue
+		}
+
+		s := cosineSimilarity(queryVec, vec)
+		scores = append(scores, score{id: id, value: s})
+	}
+
+	sort.Slice(scores, func(i, j int) bool {
+		return scores[i].value > scores[j].value
+	})
+
+	if len(scores) > limit {
+		scores = scores[:limit]
+	}
+
+	results := make([]string, 0, len(scores))
+	for _, s := range scores {
+		results = append(results, s.id)
+	}
+	return results, nil
+}
+
+func cosineSimilarity(a, b domain.Vector) float32 {
+	if len(a) != len(b) || len(a) == 0 {
+		return 0
+	}
+	var dotProduct, normA, normB float32
+	for i := range a {
+		dotProduct += a[i] * b[i]
+		normA += a[i] * a[i]
+		normB += b[i] * b[i]
+	}
+	if normA == 0 || normB == 0 {
+		return 0
+	}
+	return dotProduct / (sqrt(normA) * sqrt(normB))
+}
+
+func sqrt(x float32) float32 {
+	return float32(math.Sqrt(float64(x)))
 }

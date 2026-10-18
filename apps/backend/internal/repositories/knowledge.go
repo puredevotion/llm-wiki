@@ -16,6 +16,7 @@ type SourceRepository interface {
 
 type ZettelRepository interface {
 	Save(ctx context.Context, zettel *domain.Zettel) error
+	FindByID(ctx context.Context, id string) (*domain.Zettel, error)
 	SearchZettels(ctx context.Context, query string, limit int) ([]*domain.Zettel, error)
 }
 
@@ -43,4 +44,9 @@ type OperationRepository interface {
 	Save(ctx context.Context, op *domain.Operation) error
 	FindByID(ctx context.Context, id string) (*domain.Operation, error)
 	FetchChanges(ctx context.Context, cursor string, limit int) ([]*domain.Operation, error)
+}
+
+type VectorRepository interface {
+	Upsert(ctx context.Context, entityID, entityKind string, vector domain.Vector, model string) error
+	Search(ctx context.Context, entityKind string, vector domain.Vector, limit int) ([]string, error) // Returns entity IDs
 }

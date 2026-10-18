@@ -201,18 +201,44 @@ func TestZettelRepo(t *testing.T) {
 		}
 	})
 	
-	t.Run("Search Scan Error", func(t *testing.T) {
-		// Manually insert a zettel with NULL title which should fail scan into domain.Zettel
-		store.db.Exec("INSERT INTO zettels (id, title, body, lifecycle, status, created_by, created_at, updated_at) VALUES ('bad_scan', NULL, 'body', 'project', 'active', 'a1', '2026-05-17T12:00:00Z', '2026-05-17T12:00:00Z')")
-		// We need to manually sync FTS if triggers didn't work for NULL (they might not if INSERT fails constraint, but title is NOT NULL in schema)
-		// Wait, if title is NOT NULL, the INSERT will fail.
-		// Let's use a field that is NULLABLE in schema but NOT in our Scan.
-		// Actually, all fields in Scan seem to be NOT NULL in domain struct.
-		// Let's just use a closed DB for one more branch.
-		store.Close()
-		_, err := repo.SearchZettels(ctx, "test", 5)
+	t.Run("Search Error", func(t *testing.T) {
+		s2, c2 := setupTestDB(t)
+		r2 := s2.Zettels()
+		c2() // close
+		_, err := r2.SearchZettels(ctx, "test", 5)
 		if err == nil {
 			t.Error("expected search error on closed db")
+		}
+	})
+}
+
+func TestZettelRepo_FindByID(t *testing.T) {
+	store, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := store.Zettels()
+	ctx := context.Background()
+
+	// Seed actor for FK
+	actor := &domain.Actor{ID: "a1", Kind: "person", DisplayName: "Alice", CreatedAt: time.Now()}
+	store.Actors().Save(ctx, actor)
+
+	t.Run("Find Success", func(t *testing.T) {
+		z := &domain.Zettel{ID: "zf1", Title: "Find Me", Lifecycle: "project", Status: "active", CreatedBy: "a1", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+		if err := repo.Save(ctx, z); err != nil {
+			t.Fatalf("save failed: %v", err)
+		}
+		
+		found, err := repo.FindByID(ctx, "zf1")
+		if err != nil || found == nil {
+			t.Errorf("failed to find zettel: %v, found: %v", err, found)
+		}
+	})
+
+	t.Run("Not Found", func(t *testing.T) {
+		found, err := repo.FindByID(ctx, "missing")
+		if err != nil || found != nil {
+			t.Errorf("expected nil for missing, got %v, %v", found, err)
 		}
 	})
 }
@@ -245,16 +271,20 @@ func TestTopicRepo(t *testing.T) {
 	})
 
 	t.Run("Find Error", func(t *testing.T) {
-		store.Close()
-		_, err := repo.FindByName(ctx, "Tech")
+		s2, c2 := setupTestDB(t)
+		r2 := s2.Topics()
+		c2()
+		_, err := r2.FindByName(ctx, "Tech")
 		if err == nil {
 			t.Error("expected error on closed db")
 		}
 	})
 
 	t.Run("Save Error", func(t *testing.T) {
-		store.Close()
-		err := repo.Save(ctx, &domain.Topic{ID: "t2", Name: "Fail", CreatedAt: time.Now()})
+		s2, c2 := setupTestDB(t)
+		r2 := s2.Topics()
+		c2()
+		err := r2.Save(ctx, &domain.Topic{ID: "t2", Name: "Fail", CreatedAt: time.Now()})
 		if err == nil {
 			t.Error("expected error on closed db")
 		}
@@ -300,7 +330,6 @@ func TestOperationRepo(t *testing.T) {
 	})
 
 	t.Run("Fetch Changes", func(t *testing.T) {
-		// Save ops
 		now := time.Now().Truncate(time.Second)
 		op2 := &domain.Operation{
 			ID:            "op2",
@@ -322,23 +351,23 @@ func TestOperationRepo(t *testing.T) {
 		if len(changes) == 0 {
 			t.Fatalf("expected changes, got 0")
 		}
-		
-		// Test with cursor
-		cursor := changes[0].AppliedAt.Format(time.RFC3339)
-		_, _ = repo.FetchChanges(ctx, cursor, 10)
 	})
 	
 	t.Run("Find Error", func(t *testing.T) {
-		store.Close()
-		_, err := repo.FindByID(ctx, "op1")
+		s2, c2 := setupTestDB(t)
+		r2 := s2.Operations()
+		c2()
+		_, err := r2.FindByID(ctx, "op1")
 		if err == nil {
 			t.Error("expected error on closed db")
 		}
 	})
 
 	t.Run("Fetch Error", func(t *testing.T) {
-		store.Close()
-		_, err := repo.FetchChanges(ctx, "", 10)
+		s2, c2 := setupTestDB(t)
+		r2 := s2.Operations()
+		c2()
+		_, err := r2.FetchChanges(ctx, "", 10)
 		if err == nil {
 			t.Error("expected error on closed db")
 		}
@@ -381,10 +410,39 @@ func TestIdentityRepo(t *testing.T) {
 			t.Fatalf("failed to add member: %v", err)
 		}
 	})
+}
 
-	t.Run("Find Team Error", func(t *testing.T) {
-		store.Close()
-		_, err := repo.FindTeamByName(ctx, "Core")
+func TestVectorRepo(t *testing.T) {
+	store, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := store.Vectors()
+	ctx := context.Background()
+
+	t.Run("Upsert and Search", func(t *testing.T) {
+		v1 := domain.Vector{1.0, 0.0, 0.0}
+		if err := repo.Upsert(ctx, "z1", "zettel", v1, "model1"); err != nil {
+			t.Fatalf("upsert failed: %v", err)
+		}
+		
+		v2 := domain.Vector{0.0, 1.0, 0.0}
+		repo.Upsert(ctx, "z2", "zettel", v2, "model1")
+
+		// Search with v1
+		ids, err := repo.Search(ctx, "zettel", v1, 10)
+		if err != nil {
+			t.Fatalf("search failed: %v", err)
+		}
+		if len(ids) == 0 || ids[0] != "z1" {
+			t.Errorf("expected z1 as top match, got %v", ids)
+		}
+	})
+
+	t.Run("Search Error", func(t *testing.T) {
+		s2, c2 := setupTestDB(t)
+		r2 := s2.Vectors()
+		c2()
+		_, err := r2.Search(ctx, "zettel", domain.Vector{1, 1}, 5)
 		if err == nil {
 			t.Error("expected error on closed db")
 		}

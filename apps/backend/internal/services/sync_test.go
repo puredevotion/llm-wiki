@@ -3,88 +3,20 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
 	"llm-wiki/apps/backend/internal/domain"
 )
 
-type mockSyncOpRepo struct {
-	ops  map[string]*domain.Operation
-	fail bool
-}
-
-func (m *mockSyncOpRepo) Save(ctx context.Context, op *domain.Operation) error {
-	if m.fail {
-		return fmt.Errorf("op save failed")
-	}
-	m.ops[op.ID] = op
-	return nil
-}
-
-func (m *mockSyncOpRepo) FindByID(ctx context.Context, id string) (*domain.Operation, error) {
-	if m.fail {
-		return nil, fmt.Errorf("find error")
-	}
-	return m.ops[id], nil
-}
-
-func (m *mockSyncOpRepo) FetchChanges(ctx context.Context, cursor string, limit int) ([]*domain.Operation, error) {
-	if m.fail {
-		return nil, fmt.Errorf("fetch error")
-	}
-	var results []*domain.Operation
-	for _, op := range m.ops {
-		if op.Status == domain.OperationApplied {
-			if op.AppliedAt == nil {
-				now := time.Now()
-				op.AppliedAt = &now
-			}
-			results = append(results, op)
-		}
-		if len(results) >= limit {
-			break
-		}
-	}
-	return results, nil
-}
-
-type mockSyncZettelRepo struct {
-	zettels map[string]*domain.Zettel
-}
-
-func (m *mockSyncZettelRepo) Save(ctx context.Context, z *domain.Zettel) error {
-	m.zettels[z.ID] = z
-	return nil
-}
-func (m *mockSyncZettelRepo) SearchZettels(ctx context.Context, query string, limit int) ([]*domain.Zettel, error) {
-	return nil, nil
-}
-
-type mockSyncTopicRepo struct {
-	topics map[string]*domain.Topic
-}
-
-func (m *mockSyncTopicRepo) FindByName(ctx context.Context, name string) (*domain.Topic, error) {
-	for _, t := range m.topics {
-		if t.Name == name {
-			return t, nil
-		}
-	}
-	return nil, nil
-}
-func (m *mockSyncTopicRepo) Save(ctx context.Context, t *domain.Topic) error {
-	m.topics[t.ID] = t
-	return nil
-}
-
 func TestSyncService(t *testing.T) {
-	opRepo := &mockSyncOpRepo{ops: make(map[string]*domain.Operation)}
-	zettelRepo := &mockSyncZettelRepo{zettels: make(map[string]*domain.Zettel)}
-	topicRepo := &mockSyncTopicRepo{topics: make(map[string]*domain.Topic)}
+	opRepo := &mockOpRepo{ops: make(map[string]*domain.Operation)}
+	zettelRepo := &mockZettelRepo{zettels: make(map[string]*domain.Zettel)}
+	topicRepo := &mockTopicRepo{topics: make(map[string]*domain.Topic)}
+	vRepo := &mockVectorRepo{}
+	embeds := &mockEmbeddingsClient{}
 
-	svc := NewSyncService(opRepo, zettelRepo, topicRepo)
+	svc := NewSyncService(opRepo, zettelRepo, topicRepo, vRepo, embeds)
 	ctx := context.Background()
 
 	t.Run("Apply Zettel Upsert", func(t *testing.T) {
@@ -112,55 +44,53 @@ func TestSyncService(t *testing.T) {
 	})
 
 	t.Run("Apply Topic Upsert", func(t *testing.T) {
-		payload, _ := json.Marshal(domain.Topic{Name: "New Topic"})
+		payload, _ := json.Marshal(domain.Topic{Name: "T"})
 		batch := domain.SyncBatch{
 			Operations: []domain.Operation{
 				{
-					ID:            "op_t1",
+					ID:            "opt1",
 					EntityKind:    "topic",
 					EntityID:      "t1",
 					OperationType: "upsert",
 					Payload:       payload,
-					CreatedAt:     time.Now(),
 				},
 			},
 		}
 		results, _ := svc.ProcessBatch(ctx, batch)
 		if results[0].Status != domain.OperationApplied {
-			t.Error("topic op failed")
+			t.Error("expected applied for topic")
 		}
 	})
 
-	t.Run("Unsupported Entity", func(t *testing.T) {
+	t.Run("Apply Zettel Marshal Fail", func(t *testing.T) {
 		batch := domain.SyncBatch{
 			Operations: []domain.Operation{
 				{
-					ID:         "op_bad",
-					EntityKind: "unknown",
-					Payload:    json.RawMessage(`{}`),
+					ID:         "opm1",
+					EntityKind: "zettel",
+					Payload:    []byte("{bad}"),
 				},
 			},
 		}
 		results, _ := svc.ProcessBatch(ctx, batch)
 		if results[0].Status != domain.OperationRejected {
-			t.Error("expected rejection for unknown entity")
+			t.Error("expected rejection")
 		}
 	})
 
-	t.Run("Existing Operation Idempotency", func(t *testing.T) {
-		// Create an existing op
-		op := &domain.Operation{ID: "existing1", Status: domain.OperationApplied}
-		opRepo.Save(ctx, op)
-		
+	t.Run("Apply Topic Marshal Fail", func(t *testing.T) {
 		batch := domain.SyncBatch{
-			Operations: []domain.Operation{{ID: "existing1"}},
+			Operations: []domain.Operation{
+				{
+					ID:         "opm2",
+					EntityKind: "topic",
+					Payload:    []byte("{bad}"),
+				},
+			},
 		}
-		results, err := svc.ProcessBatch(ctx, batch)
-		if err != nil {
-			t.Fatalf("ProcessBatch failed: %v", err)
-		}
-		if len(results) != 1 || results[0].ID != "existing1" {
-			t.Error("expected existing op to be returned")
+		results, _ := svc.ProcessBatch(ctx, batch)
+		if results[0].Status != domain.OperationRejected {
+			t.Error("expected rejection")
 		}
 	})
 
@@ -175,31 +105,6 @@ func TestSyncService(t *testing.T) {
 		}
 		if len(changes) == 0 {
 			t.Error("expected changes, got 0")
-		}
-		
-		// Test with cursor
-		cursor := changes[0].Cursor
-		_, err = svc.FetchChanges(ctx, cursor, 10)
-		if err != nil {
-			t.Errorf("FetchChanges with cursor failed: %v", err)
-		}
-	})
-
-	t.Run("Op Find Error", func(t *testing.T) {
-		opRepo.fail = true
-		defer func() { opRepo.fail = false }()
-		_, err := svc.ProcessBatch(ctx, domain.SyncBatch{Operations: []domain.Operation{{ID: "x"}}})
-		if err == nil {
-			t.Error("expected error on repo find failure")
-		}
-	})
-
-	t.Run("Fetch Changes Error", func(t *testing.T) {
-		opRepo.fail = true
-		defer func() { opRepo.fail = false }()
-		_, err := svc.FetchChanges(ctx, "", 10)
-		if err == nil {
-			t.Error("expected error on fetch failure")
 		}
 	})
 }

@@ -14,18 +14,30 @@ import (
 	"llm-wiki/apps/backend/internal/services"
 )
 
-type mockZettelSearchRepo struct{}
+type mockZettelSearchRepo struct {
+	fail bool
+}
 
 func (m *mockZettelSearchRepo) Save(_ context.Context, _ *domain.Zettel) error { return nil }
+func (m *mockZettelSearchRepo) FindByID(_ context.Context, _ string) (*domain.Zettel, error) {
+	return nil, nil
+}
 func (m *mockZettelSearchRepo) SearchZettels(_ context.Context, _ string, _ int) ([]*domain.Zettel, error) {
+	if m.fail {
+		return nil, io.EOF
+	}
 	return []*domain.Zettel{}, nil
 }
 
 type mockOpRepo struct {
-	ops map[string]*domain.Operation
+	ops  map[string]*domain.Operation
+	fail bool
 }
 
 func (m *mockOpRepo) Save(ctx context.Context, op *domain.Operation) error {
+	if m.fail {
+		return io.EOF
+	}
 	m.ops[op.ID] = op
 	return nil
 }
@@ -33,6 +45,9 @@ func (m *mockOpRepo) FindByID(ctx context.Context, id string) (*domain.Operation
 	return m.ops[id], nil
 }
 func (m *mockOpRepo) FetchChanges(ctx context.Context, cursor string, limit int) ([]*domain.Operation, error) {
+	if m.fail {
+		return nil, io.EOF
+	}
 	var results []*domain.Operation
 	for _, op := range m.ops {
 		results = append(results, op)
@@ -79,8 +94,26 @@ func (m *mockGraphRepo) CreateRelationship(ctx context.Context, fromID, fromLabe
 	return nil
 }
 
+type mockVectorRepo struct{}
+
+func (m *mockVectorRepo) Upsert(ctx context.Context, id, kind string, vec domain.Vector, model string) error {
+	return nil
+}
+func (m *mockVectorRepo) Search(ctx context.Context, kind string, vector domain.Vector, limit int) ([]string, error) {
+	return nil, nil
+}
+
+type mockEmbeddingsClient struct{}
+
+func (m *mockEmbeddingsClient) Generate(ctx context.Context, text string) (domain.Vector, error) {
+	return nil, nil
+}
+func (m *mockEmbeddingsClient) BatchGenerate(ctx context.Context, texts []string) ([]domain.Vector, error) {
+	return nil, nil
+}
+
 func TestHealthEndpoint(t *testing.T) {
-	server := newTestServer()
+	server, _, _, _ := setupServer()
 	
 	t.Run("Valid GET", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -99,7 +132,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestSyncEndpoints(t *testing.T) {
-	server := newTestServer()
+	server, opRepo, _, _ := setupServer()
 
 	t.Run("Sync Operations POST", func(t *testing.T) {
 		payload := `{"operations": [{"id": "op1", "entity_kind": "zettel", "entity_id": "z1", "payload": {}}]}`
@@ -145,10 +178,29 @@ func TestSyncEndpoints(t *testing.T) {
 		server.Handler().ServeHTTP(res, req)
 		assertStatus(t, res, http.StatusMethodNotAllowed)
 	})
+
+	t.Run("Sync Operations Service Error", func(t *testing.T) {
+		opRepo.fail = true
+		payload := `{"operations": [{"id": "op_err"}]}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sync/operations", strings.NewReader(payload))
+		res := httptest.NewRecorder()
+		server.Handler().ServeHTTP(res, req)
+		assertStatus(t, res, http.StatusInternalServerError)
+		opRepo.fail = false
+	})
+
+	t.Run("Sync Changes Service Error", func(t *testing.T) {
+		opRepo.fail = true
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/sync/changes", nil)
+		res := httptest.NewRecorder()
+		server.Handler().ServeHTTP(res, req)
+		assertStatus(t, res, http.StatusInternalServerError)
+		opRepo.fail = false
+	})
 }
 
 func TestNotFound(t *testing.T) {
-	server := newTestServer()
+	server, _, _, _ := setupServer()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/unknown", nil)
 	res := httptest.NewRecorder()
 	server.Handler().ServeHTTP(res, req)
@@ -171,7 +223,7 @@ func TestRequestLogger(t *testing.T) {
 	}
 }
 
-func newTestServer() *Server {
+func setupServer() (*Server, *mockOpRepo, *mockZettelSearchRepo, *services.SyncService) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	opRepo := &mockOpRepo{ops: make(map[string]*domain.Operation)}
 	zettelRepo := &mockZettelSearchRepo{}
@@ -179,11 +231,14 @@ func newTestServer() *Server {
 	actorRepo := &mockActorRepo{}
 	identityRepo := &mockIdentityRepo{}
 	graphRepo := &mockGraphRepo{}
+	vRepo := &mockVectorRepo{}
+	embeds := &mockEmbeddingsClient{}
 	
-	syncSvc := services.NewSyncService(opRepo, zettelRepo, topicRepo)
+	syncSvc := services.NewSyncService(opRepo, zettelRepo, topicRepo, vRepo, embeds)
 	idSvc := services.NewIdentityService(actorRepo, identityRepo, graphRepo, opRepo)
+	searchSvc := services.NewSearchService(zettelRepo, vRepo, embeds)
 	
-	return NewServer(config.Config{HTTPAddr: ":0"}, logger, nil, nil, syncSvc, idSvc)
+	return NewServer(config.Config{HTTPAddr: ":0"}, logger, nil, searchSvc, syncSvc, idSvc), opRepo, zettelRepo, syncSvc
 }
 
 func assertStatus(t *testing.T, res *httptest.ResponseRecorder, expected int) {

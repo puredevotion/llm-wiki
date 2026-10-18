@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"llm-wiki/apps/backend/internal/clients/embeddings"
 	"llm-wiki/apps/backend/internal/domain"
 	"llm-wiki/apps/backend/internal/repositories"
 )
@@ -18,6 +19,8 @@ type IngestionService struct {
 	topics  repositories.TopicRepository
 	graph   repositories.GraphRepository
 	ops     repositories.OperationRepository
+	vectors repositories.VectorRepository
+	embeds  embeddings.Client
 }
 
 func NewIngestionService(
@@ -27,6 +30,8 @@ func NewIngestionService(
 	topics repositories.TopicRepository,
 	graph repositories.GraphRepository,
 	ops repositories.OperationRepository,
+	vectors repositories.VectorRepository,
+	embeds embeddings.Client,
 ) *IngestionService {
 	return &IngestionService{
 		actors:  actors,
@@ -35,6 +40,8 @@ func NewIngestionService(
 		topics:  topics,
 		graph:   graph,
 		ops:     ops,
+		vectors: vectors,
+		embeds:  embeds,
 	}
 }
 
@@ -104,6 +111,14 @@ func (s *IngestionService) IngestSummary(ctx context.Context, payload domain.Sum
 			now := time.Now()
 			tOp.AppliedAt = &now
 			_ = s.ops.Save(ctx, tOp)
+
+			// Semantic Projection
+			if s.embeds != nil && s.vectors != nil {
+				vec, err := s.embeds.Generate(ctx, topic.Name)
+				if err == nil {
+					_ = s.vectors.Upsert(ctx, topic.ID, "topic", vec, "text-embedding-3-small")
+				}
+			}
 		}
 		topicIDs = append(topicIDs, topic.ID)
 		// Ensure topic node in graph
@@ -168,6 +183,15 @@ func (s *IngestionService) IngestSummary(ctx context.Context, payload domain.Sum
 	now := time.Now()
 	zOp.AppliedAt = &now
 	_ = s.ops.Save(ctx, zOp)
+
+	// Semantic Projection
+	if s.embeds != nil && s.vectors != nil {
+		text := fmt.Sprintf("%s\n\n%s", zettel.Title, zettel.Body)
+		vec, err := s.embeds.Generate(ctx, text)
+		if err == nil {
+			_ = s.vectors.Upsert(ctx, zettel.ID, "zettel", vec, "text-embedding-3-small")
+		}
+	}
 
 	// Zettel node in graph
 	if err := s.graph.UpsertNode(ctx, zettel.ID, "Zettel", map[string]any{"title": zettel.Title, "lifecycle": zettel.Lifecycle}); err != nil {

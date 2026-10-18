@@ -47,6 +47,9 @@ type Topic struct {
 	CreatedAt time.Time
 }
 
+// Vector represents a numerical embedding for semantic search.
+type Vector []float32
+
 // SummaryPayload represents the input for ingesting a conversation summary.
 type SummaryPayload struct {
 	Project      string    `json:"project"`
