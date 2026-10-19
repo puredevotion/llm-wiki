@@ -24,6 +24,12 @@ func (m *mockActorRepo) Save(ctx context.Context, actor *domain.Actor) error {
 	}
 	return nil
 }
+func (m *mockActorRepo) List(ctx context.Context, limit int) ([]*domain.Actor, error) {
+	if m.fail {
+		return nil, fmt.Errorf("fail")
+	}
+	return nil, nil
+}
 
 type mockSourceRepo struct{}
 
@@ -45,6 +51,27 @@ func (m *mockTopicRepo) FindByName(ctx context.Context, name string) (*domain.To
 	return nil, nil
 }
 func (m *mockTopicRepo) Save(ctx context.Context, topic *domain.Topic) error { return nil }
+
+type mockIdentityRepo struct {
+	fail bool
+}
+
+func (m *mockIdentityRepo) SaveTeam(ctx context.Context, team *domain.Team) error { return nil }
+func (m *mockIdentityRepo) SaveOrganization(ctx context.Context, org *domain.Organization) error {
+	return nil
+}
+func (m *mockIdentityRepo) AddTeamMember(ctx context.Context, member *domain.TeamMember) error {
+	return nil
+}
+func (m *mockIdentityRepo) FindTeamByName(ctx context.Context, name string) (*domain.Team, error) {
+	return nil, nil
+}
+func (m *mockIdentityRepo) ListTeams(ctx context.Context, limit int) ([]*domain.Team, error) {
+	if m.fail {
+		return nil, fmt.Errorf("fail")
+	}
+	return nil, nil
+}
 
 type mockGraphRepo struct {
 	failRel bool

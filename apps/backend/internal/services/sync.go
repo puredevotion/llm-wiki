@@ -12,11 +12,14 @@ import (
 )
 
 type SyncService struct {
-	ops     repositories.OperationRepository
-	zettels repositories.ZettelRepository
-	topics  repositories.TopicRepository
-	vectors repositories.VectorRepository
-	embeds  embeddings.Client
+	ops      repositories.OperationRepository
+	zettels  repositories.ZettelRepository
+	topics   repositories.TopicRepository
+	vectors  repositories.VectorRepository
+	timeline repositories.TimelineRepository
+	actors   repositories.ActorRepository
+	identity repositories.IdentityRepository
+	embeds   embeddings.Client
 }
 
 func NewSyncService(
@@ -24,14 +27,20 @@ func NewSyncService(
 	zettels repositories.ZettelRepository,
 	topics repositories.TopicRepository,
 	vectors repositories.VectorRepository,
+	timeline repositories.TimelineRepository,
+	actors repositories.ActorRepository,
+	identity repositories.IdentityRepository,
 	embeds embeddings.Client,
 ) *SyncService {
 	return &SyncService{
-		ops:     ops,
-		zettels: zettels,
-		topics:  topics,
-		vectors: vectors,
-		embeds:  embeds,
+		ops:      ops,
+		zettels:  zettels,
+		topics:   topics,
+		vectors:  vectors,
+		timeline: timeline,
+		actors:   actors,
+		identity: identity,
+		embeds:   embeds,
 	}
 }
 
@@ -50,18 +59,13 @@ func (s *SyncService) ProcessBatch(ctx context.Context, batch domain.SyncBatch) 
 		}
 
 		// 2. Reconciliation & Application
-		// For this first version, we use simple Last-Write-Wins (LWW) or direct application
-		// because we are focusing on the append-only flow.
-		
 		appliedOp := op
 		appliedOp.Status = domain.OperationApplied
 		now := time.Now()
 		appliedOp.AppliedAt = &now
 
 		if err := s.applyOperation(ctx, &appliedOp); err != nil {
-			// If application fails, we mark as rejected
 			appliedOp.Status = domain.OperationRejected
-			// We still save the rejected operation for audit/debugging
 		}
 
 		if err := s.ops.Save(ctx, &appliedOp); err != nil {
@@ -87,7 +91,7 @@ func (s *SyncService) FetchChanges(ctx context.Context, cursor string, limit int
 	for _, op := range ops {
 		changes = append(changes, domain.SyncChange{
 			Operation: *op,
-			Cursor:    op.AppliedAt.Format(time.RFC3339), // Simple temporal cursor
+			Cursor:    op.AppliedAt.Format(time.RFC3339),
 		})
 	}
 	return changes, nil
@@ -103,6 +107,12 @@ func (s *SyncService) applyOperation(ctx context.Context, op *domain.Operation) 
 		return s.applyZettelOp(ctx, op)
 	case "topic":
 		return s.applyTopicOp(ctx, op)
+	case "event":
+		return s.applyEventOp(ctx, op)
+	case "actor":
+		return s.applyActorOp(ctx, op)
+	case "team":
+		return s.applyTeamOp(ctx, op)
 	default:
 		return fmt.Errorf("unsupported entity kind: %s", op.EntityKind)
 	}
@@ -114,7 +124,6 @@ func (s *SyncService) applyZettelOp(ctx context.Context, op *domain.Operation) e
 		return fmt.Errorf("invalid zettel payload: %w", err)
 	}
 	
-	// Ensure ID consistency
 	z.ID = op.EntityID
 	z.UpdatedAt = time.Now()
 	if z.CreatedAt.IsZero() {
@@ -159,4 +168,40 @@ func (s *SyncService) applyTopicOp(ctx context.Context, op *domain.Operation) er
 		}
 	}
 	return nil
+}
+
+func (s *SyncService) applyEventOp(ctx context.Context, op *domain.Operation) error {
+	var e domain.Event
+	if err := json.Unmarshal(op.Payload, &e); err != nil {
+		return fmt.Errorf("invalid event payload: %w", err)
+	}
+	e.ID = op.EntityID
+	if e.RecordedAt.IsZero() {
+		e.RecordedAt = time.Now()
+	}
+	return s.timeline.Save(ctx, &e)
+}
+
+func (s *SyncService) applyActorOp(ctx context.Context, op *domain.Operation) error {
+	var a domain.Actor
+	if err := json.Unmarshal(op.Payload, &a); err != nil {
+		return fmt.Errorf("invalid actor payload: %w", err)
+	}
+	a.ID = op.EntityID
+	if a.CreatedAt.IsZero() {
+		a.CreatedAt = time.Now()
+	}
+	return s.actors.Save(ctx, &a)
+}
+
+func (s *SyncService) applyTeamOp(ctx context.Context, op *domain.Operation) error {
+	var t domain.Team
+	if err := json.Unmarshal(op.Payload, &t); err != nil {
+		return fmt.Errorf("invalid team payload: %w", err)
+	}
+	t.ID = op.EntityID
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = time.Now()
+	}
+	return s.identity.SaveTeam(ctx, &t)
 }

@@ -75,6 +75,27 @@ func (r *actorRepo) FindByName(ctx context.Context, name string) (*domain.Actor,
 	return &a, nil
 }
 
+func (r *actorRepo) List(ctx context.Context, limit int) ([]*domain.Actor, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, kind, display_name, metadata_json, created_at FROM actors ORDER BY display_name ASC LIMIT ?", limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list actors: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*domain.Actor
+	for rows.Next() {
+		var a domain.Actor
+		var metadataJSON, createdAt string
+		if err := rows.Scan(&a.ID, &a.Kind, &a.DisplayName, &metadataJSON, &createdAt); err != nil {
+			return nil, fmt.Errorf("failed to scan actor: %w", err)
+		}
+		json.Unmarshal([]byte(metadataJSON), &a.Metadata)
+		a.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+		results = append(results, &a)
+	}
+	return results, nil
+}
+
 func (r *actorRepo) Save(ctx context.Context, a *domain.Actor) error {
 	metadata, err := json.Marshal(a.Metadata)
 	if err != nil {
@@ -231,6 +252,53 @@ func (r *identityRepo) AddTeamMember(ctx context.Context, m *domain.TeamMember) 
 		m.TeamID, m.ActorID, m.Role, m.CreatedAt.Format(time.RFC3339),
 	)
 	return err
+func (r *identityRepo) ListTeams(ctx context.Context, limit int) ([]*domain.Team, error) {
+...
+}
+
+func (r *identityRepo) ListOrganizations(ctx context.Context, limit int) ([]*domain.Organization, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, name, metadata_json, created_at FROM organizations ORDER BY name ASC LIMIT ?", limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list organizations: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*domain.Organization
+	for rows.Next() {
+		var o domain.Organization
+		var metadata, createdAt string
+		if err := rows.Scan(&o.ID, &o.Name, &metadata, &createdAt); err != nil {
+			return nil, fmt.Errorf("failed to scan organization: %w", err)
+		}
+		json.Unmarshal([]byte(metadata), &o.Metadata)
+		o.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+		results = append(results, &o)
+	}
+	return results, nil
+}
+
+	rows, err := r.db.QueryContext(ctx, "SELECT id, org_id, name, metadata_json, created_at FROM teams ORDER BY name ASC LIMIT ?", limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list teams: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*domain.Team
+	for rows.Next() {
+		var t domain.Team
+		var orgID sql.NullString
+		var metadata, createdAt string
+		if err := rows.Scan(&t.ID, &orgID, &t.Name, &metadata, &createdAt); err != nil {
+			return nil, fmt.Errorf("failed to scan team: %w", err)
+		}
+		if orgID.Valid {
+			t.OrgID = orgID.String
+		}
+		json.Unmarshal([]byte(metadata), &t.Metadata)
+		t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+		results = append(results, &t)
+	}
+	return results, nil
 }
 
 func (r *identityRepo) FindTeamByName(ctx context.Context, name string) (*domain.Team, error) {
