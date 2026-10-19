@@ -2,10 +2,15 @@ package mcp
 
 import (
 	"context"
+	"fmt"
+	"time"
+
 	"llm-wiki/apps/backend/internal/domain"
 )
 
-type mockActorRepo struct{}
+type mockActorRepo struct {
+	fail bool
+}
 
 func (m *mockActorRepo) FindByName(ctx context.Context, name string) (*domain.Actor, error) {
 	if name == "Alice" {
@@ -13,7 +18,12 @@ func (m *mockActorRepo) FindByName(ctx context.Context, name string) (*domain.Ac
 	}
 	return nil, nil
 }
-func (m *mockActorRepo) Save(ctx context.Context, actor *domain.Actor) error { return nil }
+func (m *mockActorRepo) Save(ctx context.Context, actor *domain.Actor) error {
+	if m.fail {
+		return fmt.Errorf("fail")
+	}
+	return nil
+}
 
 type mockSourceRepo struct{}
 
@@ -36,12 +46,17 @@ func (m *mockTopicRepo) FindByName(ctx context.Context, name string) (*domain.To
 }
 func (m *mockTopicRepo) Save(ctx context.Context, topic *domain.Topic) error { return nil }
 
-type mockGraphRepo struct{}
+type mockGraphRepo struct {
+	failRel bool
+}
 
 func (m *mockGraphRepo) UpsertNode(ctx context.Context, id, label string, properties map[string]any) error {
 	return nil
 }
 func (m *mockGraphRepo) CreateRelationship(ctx context.Context, fromID, fromLabel, toID, toLabel, relType string) error {
+	if m.failRel {
+		return fmt.Errorf("fail")
+	}
 	return nil
 }
 
@@ -70,5 +85,27 @@ func (m *mockEmbeddingsClient) Generate(ctx context.Context, text string) (domai
 	return domain.Vector{0.1}, nil
 }
 func (m *mockEmbeddingsClient) BatchGenerate(ctx context.Context, texts []string) ([]domain.Vector, error) {
+	return nil, nil
+}
+
+type mockTimelineRepo struct {
+	events map[string]*domain.Event
+	fail   bool
+}
+
+func (m *mockTimelineRepo) Save(ctx context.Context, e *domain.Event) error {
+	if m.fail {
+		return fmt.Errorf("fail")
+	}
+	if m.events == nil {
+		m.events = make(map[string]*domain.Event)
+	}
+	m.events[e.ID] = e
+	return nil
+}
+func (m *mockTimelineRepo) Fetch(ctx context.Context, startsAt, endsAt *time.Time, limit int) ([]*domain.Event, error) {
+	if m.fail {
+		return nil, fmt.Errorf("fail")
+	}
 	return nil, nil
 }

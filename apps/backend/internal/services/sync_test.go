@@ -107,4 +107,13 @@ func TestSyncService(t *testing.T) {
 			t.Error("expected changes, got 0")
 		}
 	})
+
+	t.Run("Fetch Changes Error", func(t *testing.T) {
+		opRepo.fail = true
+		defer func() { opRepo.fail = false }()
+		_, err := svc.FetchChanges(ctx, "", 10)
+		if err == nil {
+			t.Error("expected fetch error")
+		}
+	})
 }

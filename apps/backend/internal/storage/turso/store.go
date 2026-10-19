@@ -52,6 +52,7 @@ func (s *Store) Topics() repositories.TopicRepository         { return &topicRep
 func (s *Store) Operations() repositories.OperationRepository { return &operationRepo{s} }
 func (s *Store) Identity() repositories.IdentityRepository     { return &identityRepo{s} }
 func (s *Store) Vectors() repositories.VectorRepository       { return &vectorRepo{s} }
+func (s *Store) Timeline() repositories.TimelineRepository     { return &timelineRepo{s} }
 
 type actorRepo struct{ *Store }
 
@@ -251,6 +252,82 @@ func (r *identityRepo) FindTeamByName(ctx context.Context, name string) (*domain
 	json.Unmarshal([]byte(metadata), &t.Metadata)
 	t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	return &t, nil
+}
+
+type timelineRepo struct{ *Store }
+
+func (r *timelineRepo) Save(ctx context.Context, e *domain.Event) error {
+	metadata, _ := json.Marshal(e.Metadata)
+	var occAt, startsAt, endsAt *string
+	if e.OccurredAt != nil {
+		s := e.OccurredAt.Format(time.RFC3339)
+		occAt = &s
+	}
+	if e.StartsAt != nil {
+		s := e.StartsAt.Format(time.RFC3339)
+		startsAt = &s
+	}
+	if e.EndsAt != nil {
+		s := e.EndsAt.Format(time.RFC3339)
+		endsAt = &s
+	}
+
+	_, err := r.db.ExecContext(ctx,
+		"INSERT INTO events (id, kind, title, body, occurred_at, starts_at, ends_at, recorded_at, created_by, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, body=excluded.body, metadata_json=excluded.metadata_json",
+		e.ID, string(e.Kind), e.Title, e.Body, occAt, startsAt, endsAt, e.RecordedAt.Format(time.RFC3339), e.CreatedBy, string(metadata),
+	)
+	return err
+}
+
+func (r *timelineRepo) Fetch(ctx context.Context, startsAt, endsAt *time.Time, limit int) ([]*domain.Event, error) {
+	query := "SELECT id, kind, title, body, occurred_at, starts_at, ends_at, recorded_at, created_by, metadata_json FROM events WHERE 1=1"
+	var args []any
+	if startsAt != nil {
+		query += " AND (occurred_at >= ? OR starts_at >= ?)"
+		s := startsAt.Format(time.RFC3339)
+		args = append(args, s, s)
+	}
+	if endsAt != nil {
+		query += " AND (occurred_at <= ? OR ends_at <= ?)"
+		e := endsAt.Format(time.RFC3339)
+		args = append(args, e, e)
+	}
+	query += " ORDER BY COALESCE(occurred_at, starts_at) DESC LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []*domain.Event
+	for rows.Next() {
+		var e domain.Event
+		var kind, recordedAt, metadata string
+		var occAt, sAt, eAt sql.NullString
+		err := rows.Scan(&e.ID, &kind, &e.Title, &e.Body, &occAt, &sAt, &eAt, &recordedAt, &e.CreatedBy, &metadata)
+		if err != nil {
+			return nil, err
+		}
+		e.Kind = domain.EventKind(kind)
+		e.RecordedAt, _ = time.Parse(time.RFC3339, recordedAt)
+		json.Unmarshal([]byte(metadata), &e.Metadata)
+		if occAt.Valid {
+			t, _ := time.Parse(time.RFC3339, occAt.String)
+			e.OccurredAt = &t
+		}
+		if sAt.Valid {
+			t, _ := time.Parse(time.RFC3339, sAt.String)
+			e.StartsAt = &t
+		}
+		if eAt.Valid {
+			t, _ := time.Parse(time.RFC3339, eAt.String)
+			e.EndsAt = &t
+		}
+		results = append(results, &e)
+	}
+	return results, nil
 }
 
 type operationRepo struct{ *Store }

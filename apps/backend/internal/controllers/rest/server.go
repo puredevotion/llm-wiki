@@ -20,16 +20,17 @@ type Server struct {
 	searchSvc *services.SearchService
 	syncSvc   *services.SyncService
 	idSvc     *services.IdentityService
+	timeSvc   *services.TimelineService
 }
 
-func NewServer(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService, searchSvc *services.SearchService, syncSvc *services.SyncService, idSvc *services.IdentityService) *Server {
-	return &Server{cfg: cfg, logger: logger, ingestion: ingestion, searchSvc: searchSvc, syncSvc: syncSvc, idSvc: idSvc}
+func NewServer(cfg config.Config, logger *slog.Logger, ingestion *services.IngestionService, searchSvc *services.SearchService, syncSvc *services.SyncService, idSvc *services.IdentityService, timeSvc *services.TimelineService) *Server {
+	return &Server{cfg: cfg, logger: logger, ingestion: ingestion, searchSvc: searchSvc, syncSvc: syncSvc, idSvc: idSvc, timeSvc: timeSvc}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.health)
-	mux.Handle("/mcp", mcpcontroller.NewHandler(s.cfg, s.logger, s.ingestion, s.searchSvc, s.idSvc))
+	mux.Handle("/mcp", mcpcontroller.NewHandler(s.cfg, s.logger, s.ingestion, s.searchSvc, s.idSvc, s.timeSvc))
 
 	mux.HandleFunc("/api/v1/sync/operations", s.syncOperations)
 	mux.HandleFunc("/api/v1/sync/changes", s.syncChanges)
