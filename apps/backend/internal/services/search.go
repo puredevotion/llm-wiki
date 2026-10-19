@@ -20,7 +20,7 @@ func NewSearchService(zettels repositories.ZettelRepository, vectors repositorie
 	return &SearchService{zettels: zettels, vectors: vectors, embeds: embeds}
 }
 
-func (s *SearchService) Search(ctx context.Context, query string, limit int) ([]*domain.Zettel, error) {
+func (s *SearchService) Search(ctx context.Context, query string, limit int) ([]*domain.SearchResult, error) {
 	if query == "" {
 		return nil, fmt.Errorf("query is required")
 	}
@@ -50,15 +50,12 @@ func (s *SearchService) Search(ctx context.Context, query string, limit int) ([]
 	}
 
 	// 3. Hybrid RRF Ranking
-	// Map to keep track of combined scores
 	type hybridResult struct {
 		z     *domain.Zettel
 		score float64
 	}
 	combined := make(map[string]*hybridResult)
-
-	// k constant for RRF (usually 60)
-	const k = 60.0
+	k := 60.0 // RRF constant
 
 	// Add keyword ranks
 	for i, z := range keywordResults {
@@ -84,24 +81,6 @@ func (s *SearchService) Search(ctx context.Context, query string, limit int) ([]
 		}
 	}
 
-	// For simplicity in this first hybrid setup:
-	// We'll only re-rank what we found in keywords, 
-	// but we could also fetch missing Zettels by ID if they are strong semantic matches.
-	// Let's at least ensure top semantic matches are included.
-	
-	// Collect all involved IDs
-	allIDs := make(map[string]bool)
-	for id := range combined {
-		allIDs[id] = true
-	}
-	for _, id := range semanticIDs {
-		if !allIDs[id] {
-			// Fetch Zettel from repo? 
-			// repo.FindByID doesn't exist yet in ZettelRepo, but we can add it or just ignore for now.
-			// Actually, ZettelRepo.SearchZettels returns full structs.
-		}
-	}
-
 	// Convert to slice and sort
 	final := make([]*hybridResult, 0, len(combined))
 	for _, v := range combined {
@@ -116,17 +95,41 @@ func (s *SearchService) Search(ctx context.Context, query string, limit int) ([]
 		final = final[:limit]
 	}
 
-	results := make([]*domain.Zettel, 0, len(final))
+	results := make([]*domain.SearchResult, 0, len(final))
 	for _, f := range final {
-		results = append(results, f.z)
+		snippet := f.z.Body
+		if len(snippet) > 200 {
+			snippet = snippet[:197] + "..."
+		}
+		results = append(results, &domain.SearchResult{
+			ID:        f.z.ID,
+			Title:     f.z.Title,
+			Snippet:   snippet,
+			Lifecycle: f.z.Lifecycle,
+			Score:     f.score,
+		})
 	}
 
 	// Fallback to keyword only if semantic failed entirely
 	if len(results) == 0 && len(keywordResults) > 0 {
-		if len(keywordResults) > limit {
-			return keywordResults[:limit], nil
+		count := len(keywordResults)
+		if count > limit {
+			count = limit
 		}
-		return keywordResults, nil
+		for i := 0; i < count; i++ {
+			z := keywordResults[i]
+			snippet := z.Body
+			if len(snippet) > 200 {
+				snippet = snippet[:197] + "..."
+			}
+			results = append(results, &domain.SearchResult{
+				ID:        z.ID,
+				Title:     z.Title,
+				Snippet:   snippet,
+				Lifecycle: z.Lifecycle,
+				Score:     0,
+			})
+		}
 	}
 
 	return results, nil

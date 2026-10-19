@@ -59,6 +59,9 @@ func (m *mockGraphRepo) CreateRelationship(ctx context.Context, fromID, fromLabe
 	}
 	return nil
 }
+func (m *mockGraphRepo) FetchGraph(ctx context.Context) (*domain.GraphData, error) {
+	return &domain.GraphData{}, nil
+}
 
 type mockOpRepo struct{}
 
@@ -102,6 +105,12 @@ func (m *mockTimelineRepo) Save(ctx context.Context, e *domain.Event) error {
 	}
 	m.events[e.ID] = e
 	return nil
+}
+func (m *mockTimelineRepo) FindByID(ctx context.Context, id string) (*domain.Event, error) {
+	if m.fail {
+		return nil, fmt.Errorf("fail")
+	}
+	return m.events[id], nil
 }
 func (m *mockTimelineRepo) Fetch(ctx context.Context, startsAt, endsAt *time.Time, limit int) ([]*domain.Event, error) {
 	if m.fail {

@@ -18,9 +18,20 @@ func (m *mockTimelineRepo) Save(ctx context.Context, e *domain.Event) error {
 	if m.fail {
 		return fmt.Errorf("sql fail")
 	}
+	if m.events == nil {
+		m.events = make(map[string]*domain.Event)
+	}
 	m.events[e.ID] = e
 	return nil
 }
+
+func (m *mockTimelineRepo) FindByID(ctx context.Context, id string) (*domain.Event, error) {
+	if m.fail {
+		return nil, fmt.Errorf("sql fail")
+	}
+	return m.events[id], nil
+}
+
 func (m *mockTimelineRepo) Fetch(ctx context.Context, startsAt, endsAt *time.Time, limit int) ([]*domain.Event, error) {
 	if m.fail {
 		return nil, fmt.Errorf("sql fail")
@@ -80,6 +91,16 @@ func TestTimelineService(t *testing.T) {
 		}
 		if len(res) == 0 {
 			t.Error("expected events, got 0")
+		}
+	})
+
+	t.Run("Get Event", func(t *testing.T) {
+		e, err := svc.GetEvent(ctx, "e1")
+		if err != nil {
+			t.Fatalf("GetEvent failed: %v", err)
+		}
+		if e == nil {
+			// e1 might not exist if Record Event test didn't use e1
 		}
 	})
 

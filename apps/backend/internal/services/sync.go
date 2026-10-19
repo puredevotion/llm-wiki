@@ -93,6 +93,10 @@ func (s *SyncService) FetchChanges(ctx context.Context, cursor string, limit int
 	return changes, nil
 }
 
+func (s *SyncService) GetZettel(ctx context.Context, id string) (*domain.Zettel, error) {
+	return s.zettels.FindByID(ctx, id)
+}
+
 func (s *SyncService) applyOperation(ctx context.Context, op *domain.Operation) error {
 	switch op.EntityKind {
 	case "zettel":

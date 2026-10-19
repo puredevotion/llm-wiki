@@ -2,18 +2,39 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"llm-wiki/apps/backend/internal/domain"
 )
 
+type mockSearchZettelRepo struct {
+	results []*domain.Zettel
+	zettels map[string]*domain.Zettel
+	fail    bool
+}
+
+func (m *mockSearchZettelRepo) Save(ctx context.Context, zettel *domain.Zettel) error { return nil }
+func (m *mockSearchZettelRepo) FindByID(ctx context.Context, id string) (*domain.Zettel, error) {
+	if m.fail {
+		return nil, fmt.Errorf("fail")
+	}
+	return m.zettels[id], nil
+}
+func (m *mockSearchZettelRepo) SearchZettels(ctx context.Context, query string, limit int) ([]*domain.Zettel, error) {
+	if m.fail {
+		return nil, fmt.Errorf("search failed")
+	}
+	return m.results, nil
+}
+
 func TestSearchService(t *testing.T) {
-	zRepo := &mockZettelRepo{
+	zRepo := &mockSearchZettelRepo{
 		zettels: map[string]*domain.Zettel{
-			"z1": {ID: "z1", Title: "Z1"},
-			"z2": {ID: "z2", Title: "Z2"},
+			"z1": {ID: "z1", Title: "Z1", Body: "Content 1", Lifecycle: "zettel"},
+			"z2": {ID: "z2", Title: "Z2", Body: "Content 2", Lifecycle: "evergreen"},
 		},
-		results: []*domain.Zettel{{ID: "z1", Title: "Keyword Match"}},
+		results: []*domain.Zettel{{ID: "z1", Title: "Keyword Match", Body: "Match body", Lifecycle: "zettel"}},
 	}
 	zRepo.fail = false
 	
@@ -45,7 +66,7 @@ func TestSearchService(t *testing.T) {
 
 	t.Run("Limit Keywords", func(t *testing.T) {
 		zRepo.results = []*domain.Zettel{
-			{ID: "1"}, {ID: "2"}, {ID: "3"},
+			{ID: "1", Body: "1"}, {ID: "2", Body: "2"}, {ID: "3", Body: "3"},
 		}
 		s2 := NewSearchService(zRepo, nil, nil)
 		res, _ := s2.Search(ctx, "test", 2)
@@ -55,7 +76,7 @@ func TestSearchService(t *testing.T) {
 	})
 
 	t.Run("Semantic Returns No Results", func(t *testing.T) {
-		zRepo.results = []*domain.Zettel{{ID: "z1"}}
+		zRepo.results = []*domain.Zettel{{ID: "z1", Body: "B"}}
 		vRepo.ids = []string{}
 		results, err := service.Search(ctx, "test", 5)
 		if err != nil {
@@ -91,7 +112,7 @@ func TestSearchService(t *testing.T) {
 	})
 
 	t.Run("Hybrid RRF Sorting", func(t *testing.T) {
-		zRepo.results = []*domain.Zettel{{ID: "z1"}, {ID: "z2"}}
+		zRepo.results = []*domain.Zettel{{ID: "z1", Body: "B1"}, {ID: "z2", Body: "B2"}}
 		vRepo.ids = []string{"z2", "z1"}
 		results, _ := service.Search(ctx, "test", 10)
 		if len(results) < 2 {

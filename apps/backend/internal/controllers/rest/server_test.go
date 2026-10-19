@@ -93,6 +93,9 @@ func (m *mockGraphRepo) UpsertNode(ctx context.Context, id, label string, proper
 func (m *mockGraphRepo) CreateRelationship(ctx context.Context, fromID, fromLabel, toID, toLabel, relType string) error {
 	return nil
 }
+func (m *mockGraphRepo) FetchGraph(ctx context.Context) (*domain.GraphData, error) {
+	return &domain.GraphData{}, nil
+}
 
 type mockVectorRepo struct{}
 
@@ -197,6 +200,14 @@ func TestSyncEndpoints(t *testing.T) {
 		assertStatus(t, res, http.StatusInternalServerError)
 		opRepo.fail = false
 	})
+
+	t.Run("Graph GET", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/graph", nil)
+		res := httptest.NewRecorder()
+		server.Handler().ServeHTTP(res, req)
+		assertStatus(t, res, http.StatusOK)
+		assertJSONContentType(t, res)
+	})
 }
 
 func TestNotFound(t *testing.T) {
@@ -238,8 +249,9 @@ func setupServer() (*Server, *mockOpRepo, *mockZettelSearchRepo, *services.SyncS
 	idSvc := services.NewIdentityService(actorRepo, identityRepo, graphRepo, opRepo)
 	searchSvc := services.NewSearchService(zettelRepo, vRepo, embeds)
 	timeSvc := services.NewTimelineService(nil, graphRepo, opRepo)
+	graphSvc := services.NewGraphService(graphRepo)
 	
-	return NewServer(config.Config{HTTPAddr: ":0"}, logger, nil, searchSvc, syncSvc, idSvc, timeSvc), opRepo, zettelRepo, syncSvc
+	return NewServer(config.Config{HTTPAddr: ":0"}, logger, nil, searchSvc, syncSvc, idSvc, timeSvc, graphSvc), opRepo, zettelRepo, syncSvc
 }
 
 func assertStatus(t *testing.T, res *httptest.ResponseRecorder, expected int) {

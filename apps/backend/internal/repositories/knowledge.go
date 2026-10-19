@@ -35,6 +35,7 @@ type IdentityRepository interface {
 
 type TimelineRepository interface {
 	Save(ctx context.Context, event *domain.Event) error
+	FindByID(ctx context.Context, id string) (*domain.Event, error)
 	Fetch(ctx context.Context, startsAt, endsAt *time.Time, limit int) ([]*domain.Event, error)
 }
 
@@ -44,6 +45,8 @@ type GraphRepository interface {
 	CreateRelationship(ctx context.Context, fromID, fromLabel, toID, toLabel, relType string) error
 	// UpsertNode ensures a node exists with the given ID and label.
 	UpsertNode(ctx context.Context, id, label string, properties map[string]any) error
+	// FetchGraph returns the entire graph for visualization.
+	FetchGraph(ctx context.Context) (*domain.GraphData, error)
 }
 
 type OperationRepository interface {

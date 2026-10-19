@@ -61,7 +61,7 @@ func TestSearchToolHandler(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	repo := &mockZettelSearchSvcRepo{
 		results: []*domain.Zettel{
-			{ID: "z1", Title: "Title 1", Lifecycle: "evergreen"},
+			{ID: "z1", Title: "Title 1", Body: "Body 1", Lifecycle: "evergreen"},
 		},
 	}
 	searchSvc := services.NewSearchService(repo, &mockVectorRepo{}, &mockSearchEmbeddingsClient{})
